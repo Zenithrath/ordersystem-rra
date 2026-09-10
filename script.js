@@ -221,7 +221,7 @@ function renderOrdersTable() {
         <p class="text-sm text-surface-800 truncate max-w-[120px]" title="${o.Users || ""}">${o.Users || "-"}</p>
       </td>
       <td class="px-5 py-4 hidden lg:table-cell cursor-pointer" onclick="openOrderDetail('${o.OrderID}')">
-        <p class="text-sm text-surface-500 truncate max-w-[150px]" title="${o.Purpose || ""}">${o.Purpose || "-"}</p>
+        <p class="text-sm text-surface-500 truncate max-w-[150px]" title="${(o.Items || []).map(it => it.Description).filter(d => d).join(", ") || ""}">${(o.Items || []).map(it => it.Description).filter(d => d).join(", ") || "-"}</p>
       </td>
       <td class="px-5 py-4 cursor-pointer" onclick="openOrderDetail('${o.OrderID}')">
         <p class="text-sm text-surface-600 truncate max-w-[200px]" title="${itemNames}">${itemNames || "-"}</p>
@@ -623,6 +623,7 @@ function renderDrawer(order) {
               <tr class="text-[10px] font-medium text-surface-400 uppercase border-b border-surface-100">
                 <th class="text-left py-2 px-2">NO</th>
                 <th class="text-left py-2 px-2">USER</th>
+                <th class="text-left py-2 px-2">DESCRIPTION</th>
                 <th class="text-left py-2 px-2">SPECIFICATION</th>
                 <th class="text-center py-2 px-2">QTY</th>
                 <th class="text-center py-2 px-2">UOM</th>
@@ -635,6 +636,7 @@ function renderDrawer(order) {
                 <tr class="border-b border-surface-50">
                   <td class="py-2 px-2 text-surface-500">${idx + 1}</td>
                   <td class="py-2 px-2 text-surface-700">${it.User || "-"}</td>
+                  <td class="py-2 px-2 text-surface-600">${it.Description || "-"}</td>
                   <td class="py-2 px-2 font-medium text-surface-800">${it.ItemName}</td>
                   <td class="py-2 px-2 text-center text-surface-700">${it.Quantity}</td>
                   <td class="py-2 px-2 text-center text-surface-500">${it.Unit}</td>
@@ -737,8 +739,9 @@ function addItemRow() {
   const row = document.createElement("div");
   row.className = "item-row";
   row.innerHTML = `
-    <input type="text" placeholder="USER" required class="item-user px-3 py-2.5 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 w-32" />
-    <input type="text" placeholder="SPECIFICATION (item name)" required class="item-name px-3 py-2.5 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 flex-1 min-w-[150px]" />
+    <input type="text" placeholder="USER" required class="item-user px-3 py-2.5 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 w-28" />
+    <input type="text" placeholder="DESCRIPTION" class="item-description px-3 py-2.5 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 w-36" />
+    <input type="text" placeholder="SPECIFICATION" required class="item-name px-3 py-2.5 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 flex-1 min-w-[130px]" />
     <input type="number" placeholder="QTY" min="0" value="1" required class="item-qty px-3 py-2 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 w-20" />
     <select class="item-unit px-3 py-2.5 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400">
       ${CONFIG.UNITS.map((u) => `<option value="${u}">${u}</option>`).join("")}
@@ -766,6 +769,7 @@ function getFormData() {
     if (name) {
       items.push({
         user: row.querySelector(".item-user").value.trim(),
+        description: row.querySelector(".item-description").value.trim(),
         itemName: name,
         quantity: parseInt(row.querySelector(".item-qty").value) || 1,
         unit: row.querySelector(".item-unit").value,
@@ -779,7 +783,6 @@ function getFormData() {
   return {
     date: document.getElementById("form-date").value,
     department: document.getElementById("form-department").value,
-    purpose: document.getElementById("form-purpose").value.trim(),
     items,
   };
 }
@@ -844,7 +847,6 @@ function editOrder(orderId) {
     document.getElementById("form-order-id").value = orderId;
     document.getElementById("form-date").value = order.Date || "";
     document.getElementById("form-department").value = order.Department || "";
-    document.getElementById("form-purpose").value = order.Purpose || "";
 
     const container = document.getElementById("items-container");
     container.innerHTML = "";
@@ -853,6 +855,7 @@ function editOrder(orderId) {
       const rows = container.querySelectorAll(".item-row");
       const lastRow = rows[rows.length - 1];
       lastRow.querySelector(".item-user").value = it.User || "";
+      lastRow.querySelector(".item-description").value = it.Description || "";
       lastRow.querySelector(".item-name").value = it.ItemName || "";
       lastRow.querySelector(".item-qty").value = it.Quantity || 1;
       lastRow.querySelector(".item-unit").value = it.Unit || "pcs";
@@ -871,7 +874,6 @@ function resetForm() {
   document.getElementById("form-order-id").value = "";
   document.getElementById("form-date").value = new Date().toISOString().slice(0, 10);
   document.getElementById("form-department").value = "";
-  document.getElementById("form-purpose").value = "";
   document.getElementById("items-container").innerHTML = "";
   document.getElementById("items-error").classList.add("hidden");
   document.getElementById("btn-submit-order").textContent = "Create Order";
@@ -903,7 +905,6 @@ function exportExcel() {
         Date: o.Date || "",
         Users: o.Users || "",
         Department: o.Department || "",
-        Purpose: o.Purpose || "",
         ItemNames: o.Items || o.ItemNames || "",
         Status: o.Status || ""
       }));
@@ -962,7 +963,7 @@ function generateExcelFromData(orders) {
         idx + 1,
         it.User || "",
         o.Department || "",
-        o.Purpose || "",
+        it.Description || "",
         it.ItemName || "",
         it.Quantity || 0,
         it.Unit || "PCS",
@@ -1106,17 +1107,15 @@ function exportWorkOrderPDF() {
       <div class="grid">
         <div><div class="label">Order Date</div><div class="value">${formatDate(o.Date)}</div></div>
         <div><div class="label">NO. PR</div><div class="value">${o.NoPR || o.OrderID}</div></div>
-        <div><div class="label">USER</div><div class="value">${o.Users || "-"}</div></div>
         <div><div class="label">DEP</div><div class="value">${o.Department}</div></div>
-        <div><div class="label">DESCRIPTION</div><div class="value">${o.Purpose || "-"}</div></div>
       </div>
       <table>
-        <thead><tr><th>#</th><th>SPECIFICATION</th><th>QTY</th><th>UOM</th><th>SALDO</th><th>CLEAR</th></tr></thead>
+        <thead><tr><th>#</th><th>USER</th><th>DESCRIPTION</th><th>SPECIFICATION</th><th>QTY</th><th>UOM</th><th>SALDO</th><th>CLEAR</th></tr></thead>
         <tbody>
           ${(o.Items || [])
             .map(
               (it, i) => `
-            <tr><td>${i + 1}</td><td>${it.ItemName}</td><td>${it.Quantity}</td><td>${it.Unit}</td><td>${it.SaldoQty || 0} ${it.SaldoUom || ""}</td><td>${it.Clear ? "V" : ""}</td></tr>
+            <tr><td>${i + 1}</td><td>${it.User || ""}</td><td>${it.Description || ""}</td><td>${it.ItemName}</td><td>${it.Quantity}</td><td>${it.Unit}</td><td>${it.SaldoQty || 0} ${it.SaldoUom || ""}</td><td>${it.Clear ? "V" : ""}</td></tr>
           `,
             )
             .join("")}

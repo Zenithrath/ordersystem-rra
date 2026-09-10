@@ -9,8 +9,8 @@ const CACHE_TTL = 180;
 const COL_COUNT = 13;
 
 const HEADERS = [
-  "OrderID", "Date", "Department", "Purpose", "Status",
-  "User", "ItemName", "Quantity", "Unit", "SaldoQty", "SaldoUom", "NoPR", "Clear"
+  "OrderID", "Date", "Department", "Status",
+  "User", "Description", "ItemName", "Quantity", "Unit", "SaldoQty", "SaldoUom", "NoPR", "Clear"
 ];
 
 function doGet(e) {
@@ -55,9 +55,7 @@ function getSheet(name) {
 
 function generateOrderID() {
   const sheet = getSheet(SHEET_ORDERS);
-  const today = new Date();
-  const dateStr = Utilities.formatDate(today, "Asia/Jakarta", "yyyyMMdd");
-  const prefix = "WO-" + dateStr + "-";
+  const prefix = "WS1-9-";
   const lastRow = sheet.getLastRow();
   let maxNum = 0;
   if (lastRow > 1) {
@@ -101,18 +99,19 @@ function readOrders() {
         OrderID: oid,
         Date: dateVal,
         Department: String(r[2] || ""),
-        Purpose: String(r[3] || ""),
-        Status: String(r[4] || "Pending"),
+        Status: String(r[3] || "Pending"),
         Items: []
       };
       orderKeys.push(oid);
     }
 
     const itemName = String(r[6] || "").trim();
-    const userName = String(r[5] || "").trim();
+    const userName = String(r[4] || "").trim();
+    const desc = String(r[5] || "").trim();
     if (itemName) {
       orderMap[oid].Items.push({
         User: userName,
+        Description: desc,
         ItemName: itemName,
         Quantity: parseInt(r[7]) || 0,
         Unit: String(r[8] || "pcs"),
@@ -223,9 +222,9 @@ function migrateData() {
         oid,
         dateVal,
         String(r[colIdx["Department"] || 3] || ""),
-        String(r[colIdx["Purpose"] || 4] || ""),
         String(r[colIdx["Status"] || 6] || "Pending"),
         it.User || it.user || "",
+        it.Description || it.description || it.Notes || "",
         it.ItemName || it.itemName || "",
         parseInt(it.Quantity || it.quantity) || 0,
         it.Unit || it.unit || "pcs",
@@ -335,7 +334,7 @@ function getDepartments() {
 }
 
 function createOrder(body) {
-  const { date, department, purpose, items } = body;
+  const { date, department, items } = body;
   if (!department || !items || items.length === 0) {
     return { success: false, message: "Missing required fields" };
   }
@@ -345,9 +344,9 @@ function createOrder(body) {
   const sheet = getSheet(SHEET_ORDERS);
 
   const rows = items.map(it => [
-    orderId, orderDate, department,
-    purpose || "", "Pending",
+    orderId, orderDate, department, "Pending",
     it.user || "",
+    it.description || "",
     it.itemName || "",
     parseInt(it.quantity) || 0,
     it.unit || "pcs",
@@ -366,7 +365,7 @@ function createOrder(body) {
 }
 
 function updateOrder(body) {
-  const { orderId, date, department, purpose, items } = body;
+  const { orderId, date, department, items } = body;
   if (!orderId) return { success: false, message: "Order ID is required" };
 
   const sheet = getSheet(SHEET_ORDERS);
@@ -377,20 +376,16 @@ function updateOrder(body) {
   }
   if (startRow.length === 0) return { success: false, message: "Order not found" };
 
-  // Delete old rows (bottom to top)
   for (let i = startRow.length - 1; i >= 0; i--) {
     sheet.deleteRow(startRow[i]);
   }
 
-  // Get current status from first deleted row
-  const oldStatus = data[startRow[0] - 1][4] || "Pending";
-
-  // Insert new rows
+  const oldStatus = data[startRow[0] - 1][3] || "Pending";
   const orderDate = date || data[startRow[0] - 1][1];
-  const rows = (items && items.length > 0 ? items : [{ user: "", itemName: "", quantity: 0, unit: "pcs", saldoQty: 0, saldoUom: "pcs", clear: false }]).map(it => [
-    orderId, orderDate,
-    department || "", purpose || "", oldStatus,
+  const rows = (items && items.length > 0 ? items : [{ user: "", description: "", itemName: "", quantity: 0, unit: "pcs", saldoQty: 0, saldoUom: "pcs", clear: false }]).map(it => [
+    orderId, orderDate, department || "", oldStatus,
     it.user || "",
+    it.description || "",
     it.itemName || "",
     parseInt(it.quantity) || 0,
     it.unit || "pcs",
@@ -417,7 +412,7 @@ function updateOrderStatus(body) {
   const data = sheet.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] === orderId) {
-      sheet.getRange(i + 1, 5).setValue(status);
+      sheet.getRange(i + 1, 4).setValue(status);
     }
   }
   CacheService.getScriptCache().remove("dashboard_stats");
@@ -528,11 +523,10 @@ function generateSampleData() {
       const year = 2026;
       const day = 1 + Math.floor(Math.random() * 28);
       const dateStr = year + "-" + String(month + 1).padStart(2, "0") + "-" + String(day).padStart(2, "0");
-      const orderId = "WO-" + year + String(month + 1).padStart(2, "0") + String(day).padStart(2, "0") + "-" + String(orderNum).padStart(3, "0");
+      const orderId = "WS1-9-" + String(orderNum).padStart(3, "0");
 
       const name = names[Math.floor(Math.random() * names.length)];
       const dept = depts[Math.floor(Math.random() * depts.length)];
-      const desc = descriptions[Math.floor(Math.random() * descriptions.length)];
 
       let statusRand = Math.random() * 100;
       let status = "Completed";
@@ -552,10 +546,11 @@ function generateSampleData() {
         const saldoQty = Math.floor(Math.random() * 10);
         const clear = Math.random() > 0.7;
         const userName = names[Math.floor(Math.random() * names.length)];
+        const itemDesc = descriptions[Math.floor(Math.random() * descriptions.length)];
 
         rows.push([
-          orderId, dateStr, dept, desc, status,
-          userName, item.name, qty, item.unit,
+          orderId, dateStr, dept, status,
+          userName, itemDesc, item.name, qty, item.unit,
           saldoQty, item.unit,
           orderId, clear
         ]);

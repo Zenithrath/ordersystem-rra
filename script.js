@@ -862,8 +862,25 @@ function resetForm() {
 
 function exportExcel() {
   showToast("Generating Excel...", "info");
-  // Export currently filtered/paginated data from local state
-  generateExcelFromData(allOrders);
+  const filters = {};
+  const q = document.getElementById("search-input").value.trim();
+  const status = document.getElementById("filter-status").value;
+  const dept = document.getElementById("filter-department").value;
+  const month = document.getElementById("filter-month").value;
+  const year = document.getElementById("filter-year").value;
+  if (q) filters.q = q;
+  if (status) filters.status = status;
+  if (dept) filters.department = dept;
+  if (month) filters.month = month;
+  if (year) filters.year = year;
+
+  ApiService.exportExcel(filters).then(res => {
+    if (res.success && res.data && res.data.length > 0) {
+      generateExcelFromData(res.data);
+    } else {
+      showToast("No data to export", "info");
+    }
+  }).catch(() => showToast("Export failed", "error"));
 }
 
 function generateExcelFromData(orders) {

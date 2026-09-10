@@ -1367,7 +1367,6 @@ function exportWorkOrderPDF() {
       <div class="sig">
         <div class="sig-box"><div>Disetujui,</div><div class="space"></div><div class="name">( .................... )</div></div>
       </div>
-      <div class="footer">Generated ${new Date().toLocaleDateString("id-ID")} &middot; Order Management System</div>
     </body></html>
   `);
   printWindow.document.close();

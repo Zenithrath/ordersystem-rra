@@ -650,26 +650,65 @@ function exportExcel() {
   showToast("Generating Excel...", "info");
 
   ApiService.exportExcel(currentFilters).then(res => {
-    if (!res.success) {
+    if (!res.success || !res.data) {
       showToast(res.message || "Export failed", "error");
       return;
     }
 
-    const byteString = atob(res.data);
-    const ab = new ArrayBuffer(byteString.length);
-    const ia = new Uint8Array(ab);
-    for (let i = 0; i < byteString.length; i++) {
-      ia[i] = byteString.charCodeAt(i);
+    const rows = res.data;
+    if (rows.length === 0) {
+      showToast("No data to export", "info");
+      return;
     }
-    const blob = new Blob([ab], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
 
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = res.filename || "work_orders.xlsx";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(link.href);
+    // Build workbook with SheetJS
+    const wb = XLSX.utils.book_new();
+
+    // Main data sheet
+    const ws = XLSX.utils.json_to_sheet(rows);
+
+    // Column widths
+    ws["!cols"] = [
+      { wch: 18 }, // Order ID
+      { wch: 12 }, // Date
+      { wch: 18 }, // Requester
+      { wch: 16 }, // Department
+      { wch: 22 }, // Purpose
+      { wch: 40 }, // Items
+      { wch: 12 }, // Status
+      { wch: 22 }, // Notes
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, "Work Orders");
+
+    // Summary sheet
+    const statusCounts = {};
+    const deptCounts = {};
+    rows.forEach(r => {
+      statusCounts[r.Status] = (statusCounts[r.Status] || 0) + 1;
+      deptCounts[r.Department] = (deptCounts[r.Department] || 0) + 1;
+    });
+
+    const summaryRows = [
+      { Metric: "Total Orders", Value: rows.length },
+      { Metric: "Pending", Value: statusCounts["Pending"] || 0 },
+      { Metric: "In Progress", Value: statusCounts["In Progress"] || 0 },
+      { Metric: "Completed", Value: statusCounts["Completed"] || 0 },
+      { Metric: "Cancelled", Value: statusCounts["Cancelled"] || 0 },
+      { Metric: "", Value: "" },
+      { Metric: "Department Breakdown", Value: "" },
+    ];
+    Object.keys(deptCounts).sort().forEach(dept => {
+      summaryRows.push({ Metric: dept, Value: deptCounts[dept] });
+    });
+
+    const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
+    wsSummary["!cols"] = [{ wch: 22 }, { wch: 12 }];
+    XLSX.utils.book_append_sheet(wb, wsSummary, "Summary");
+
+    // Generate and download
+    const filename = res.filename || "work_orders";
+    XLSX.writeFile(wb, filename + ".xlsx");
 
     showToast("Excel downloaded", "success");
   });

@@ -448,7 +448,6 @@ function exportExcel(params) {
   const { orders, items } = readAllData();
   let filtered = buildOrderMapWithItems(orders, items);
 
-  // Apply same filters as getOrders
   if (params.q) {
     const q = params.q.toLowerCase();
     const matchingItemIds = new Set();
@@ -474,137 +473,21 @@ function exportExcel(params) {
 
   filtered.sort((a, b) => new Date(b.CreatedAt) - new Date(a.CreatedAt));
 
-  // Create temporary spreadsheet
-  const tempSS = SpreadsheetApp.create("Work Orders Export");
-  const tempSheet = tempSS.getActiveSheet();
-  tempSheet.setName("Work Orders");
-
-  // Title row
-  tempSheet.getRange("A1").setValue("PT. RRA — Work Orders Report");
-  tempSheet.getRange("A1").setFontSize(14).setFontWeight("bold").setFontColor("#115e59");
-  tempSheet.getRange("A1:H1").merge();
-
-  // Subtitle
-  const now = new Date();
-  const dateStr = Utilities.formatDate(now, "Asia/Jakarta", "dd MMM yyyy HH:mm");
-  tempSheet.getRange("A2").setValue("Generated: " + dateStr);
-  tempSheet.getRange("A2").setFontSize(9).setFontColor("#64748b");
-  tempSheet.getRange("A2:H2").merge();
-
-  // Summary row
-  tempSheet.getRange("A3").setValue("Total Orders: " + filtered.length);
-  tempSheet.getRange("A3").setFontSize(9).setFontColor("#64748b");
-  tempSheet.getRange("A3:H3").merge();
-
-  // Headers
-  const headers = ["Order ID", "Date", "Requester", "Department", "Purpose", "Items", "Status", "Notes"];
-  tempSheet.getRange(5, 1, 1, headers.length).setValues([headers]);
-  tempSheet.getRange(5, 1, 1, headers.length)
-    .setBackground("#0d9488")
-    .setFontColor("#ffffff")
-    .setFontWeight("bold")
-    .setFontSize(10)
-    .setHorizontalAlignment("center");
-
-  // Data rows
-  const rows = filtered.map(o => [
-    o.OrderID,
-    o.Date,
-    o.RequesterName,
-    o.Department,
-    o.Purpose || "",
-    (o.Items || []).map(it => it.ItemName + " (" + it.Quantity + " " + it.Unit + ")").join(", "),
-    o.Status,
-    o.Notes || ""
-  ]);
-
-  if (rows.length > 0) {
-    tempSheet.getRange(6, 1, rows.length, headers.length).setValues(rows);
-  }
-
-  // Alternating row colors
-  for (let i = 0; i < rows.length; i++) {
-    if (i % 2 === 0) {
-      tempSheet.getRange(6 + i, 1, 1, headers.length).setBackground("#f0fdfa");
-    }
-  }
-
-  // Borders
-  const dataRange = tempSheet.getRange(5, 1, rows.length + 1, headers.length);
-  dataRange.setBorder(true, true, true, true, true, true, "#e2e8f0", SpreadsheetApp.BorderStyle.SOLID);
-
-  // Column widths
-  tempSheet.setColumnWidth(1, 160); // Order ID
-  tempSheet.setColumnWidth(2, 100); // Date
-  tempSheet.setColumnWidth(3, 140); // Requester
-  tempSheet.setColumnWidth(4, 130); // Department
-  tempSheet.setColumnWidth(5, 180); // Purpose
-  tempSheet.setColumnWidth(6, 250); // Items
-  tempSheet.setColumnWidth(7, 100); // Status
-  tempSheet.setColumnWidth(8, 180); // Notes
-
-  // Status color coding
-  for (let i = 0; i < rows.length; i++) {
-    const statusCell = tempSheet.getRange(6 + i, 7);
-    const status = rows[i][6];
-    if (status === "Pending") {
-      statusCell.setBackground("#fef3c7").setFontColor("#92400e");
-    } else if (status === "In Progress") {
-      statusCell.setBackground("#dbeafe").setFontColor("#1e40af");
-    } else if (status === "Completed") {
-      statusCell.setBackground("#d1fae5").setFontColor("#065f46");
-    } else if (status === "Cancelled") {
-      statusCell.setBackground("#fee2e2").setFontColor("#991b1b");
-    }
-  }
-
-  // Freeze header row
-  tempSheet.setFrozenRows(5);
-
-  // Auto-filter
-  if (rows.length > 0) {
-    tempSheet.getRange(5, 1, rows.length + 1, headers.length).createFilter();
-  }
-
-  // Text wrapping for items and notes columns
-  tempSheet.getRange(6, 6, rows.length, 1).setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
-  tempSheet.getRange(6, 8, rows.length, 1).setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
-
-  // Summary sheet
-  const summarySheet = tempSS.insertSheet("Summary");
-  summarySheet.getRange("A1").setValue("Summary");
-  summarySheet.getRange("A1").setFontSize(13).setFontWeight("bold");
-
-  const summaryData = [
-    ["Metric", "Value"],
-    ["Total Orders", filtered.length],
-    ["Pending", filtered.filter(o => o.Status === "Pending").length],
-    ["In Progress", filtered.filter(o => o.Status === "In Progress").length],
-    ["Completed", filtered.filter(o => o.Status === "Completed").length],
-    ["Cancelled", filtered.filter(o => o.Status === "Cancelled").length],
-    ["", ""],
-    ["Department Breakdown", ""],
-  ];
-
-  // Department counts
-  const deptCounts = {};
-  filtered.forEach(o => { deptCounts[o.Department] = (deptCounts[o.Department] || 0) + 1; });
-  Object.keys(deptCounts).sort().forEach(dept => {
-    summaryData.push([dept, deptCounts[dept]]);
-  });
-
-  summarySheet.getRange(1, 1, summaryData.length, 2).setValues(summaryData);
-  summarySheet.getRange(1, 1, 1, 2).setBackground("#0d9488").setFontColor("#ffffff").setFontWeight("bold");
-  summarySheet.setColumnWidth(1, 180);
-  summarySheet.setColumnWidth(2, 100);
-
-  // Get XLSX blob and convert to base64
-  const xlsxBlob = tempSS.getAs("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-  const base64 = Utilities.base64Encode(xlsxBlob.getBytes());
+  const rows = filtered.map(o => ({
+    "Order ID": o.OrderID,
+    "Date": o.Date,
+    "Requester": o.RequesterName,
+    "Department": o.Department,
+    "Purpose": o.Purpose || "",
+    "Items": (o.Items || []).map(it => it.ItemName + " (" + it.Quantity + " " + it.Unit + ")").join(", "),
+    "Status": o.Status,
+    "Notes": o.Notes || ""
+  }));
 
   return {
     success: true,
-    data: base64,
-    filename: "Work_Orders_" + Utilities.formatDate(now, "Asia/Jakarta", "yyyyMMdd_HHmmss") + ".xlsx"
+    data: rows,
+    total: rows.length,
+    filename: "Work_Orders_" + Utilities.formatDate(new Date(), "Asia/Jakarta", "yyyyMMdd_HHmmss")
   };
 }

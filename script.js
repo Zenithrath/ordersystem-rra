@@ -120,7 +120,7 @@ function renderRecentOrders(orders) {
       </div>
       <div class="text-right shrink-0 ml-3">
         <span class="badge badge-${statusClass(o.Status)}">${o.Status}</span>
-        <p class="text-[11px] text-surface-400 mt-1 truncate max-w-[120px]" title="${o.ItemNames || ''}">${o.ItemNames || o.ItemCount + ' items'}</p>
+        <p class="text-[11px] text-surface-400 mt-1 truncate max-w-[120px]" title="${o.ItemNames || ""}">${o.ItemNames || o.ItemCount + " items"}</p>
       </div>
     </div>
   `,
@@ -202,12 +202,11 @@ function renderOrdersTable() {
   }
 
   tbody.innerHTML = allOrders
-    .map(
-      (o) => {
-        const checked = selectedOrders.has(o.OrderID) ? "checked" : "";
-        const itemNames = o.ItemNames || (o.Items || []).map(it => it.ItemName).join(", ");
-        return `
-    <tr class="${selectedOrders.has(o.OrderID) ? 'bg-primary-50/50' : ''}">
+    .map((o) => {
+      const checked = selectedOrders.has(o.OrderID) ? "checked" : "";
+      const itemNames = o.ItemNames || (o.Items || []).map((it) => it.ItemName).join(", ");
+      return `
+    <tr class="${selectedOrders.has(o.OrderID) ? "bg-primary-50/50" : ""}">
       <td class="px-5 py-4 w-10">
         <input type="checkbox" value="${o.OrderID}" ${checked} onchange="toggleSelectOrder('${o.OrderID}', this)" class="w-4 h-4 rounded border-surface-300 text-primary-500 focus:ring-primary-500/20 cursor-pointer" />
       </td>
@@ -220,7 +219,17 @@ function renderOrdersTable() {
         <p class="text-sm text-surface-800 truncate max-w-[120px]" title="${o.Users || ""}">${o.Users || "-"}</p>
       </td>
       <td class="px-5 py-4 hidden lg:table-cell cursor-pointer" onclick="openOrderDetail('${o.OrderID}')">
-        <p class="text-sm text-surface-500 truncate max-w-[150px]" title="${(o.Items || []).map(it => it.Description).filter(d => d).join(", ") || ""}">${(o.Items || []).map(it => it.Description).filter(d => d).join(", ") || "-"}</p>
+        <p class="text-sm text-surface-500 truncate max-w-[150px]" title="${
+          (o.Items || [])
+            .map((it) => it.Description)
+            .filter((d) => d)
+            .join(", ") || ""
+        }">${
+          (o.Items || [])
+            .map((it) => it.Description)
+            .filter((d) => d)
+            .join(", ") || "-"
+        }</p>
       </td>
       <td class="px-5 py-4 cursor-pointer" onclick="openOrderDetail('${o.OrderID}')">
         <p class="text-sm text-surface-600 truncate max-w-[200px]" title="${itemNames}">${itemNames || "-"}</p>
@@ -235,8 +244,7 @@ function renderOrdersTable() {
       </td>
     </tr>
     `;
-      },
-    )
+    })
     .join("");
 }
 
@@ -301,9 +309,9 @@ function changePageSize(size) {
 
 function toggleSelectAll(cb) {
   if (cb.checked) {
-    allOrders.forEach(o => selectedOrders.add(o.OrderID));
+    allOrders.forEach((o) => selectedOrders.add(o.OrderID));
   } else {
-    allOrders.forEach(o => selectedOrders.delete(o.OrderID));
+    allOrders.forEach((o) => selectedOrders.delete(o.OrderID));
   }
   renderOrdersTable();
   updateSelectedUI();
@@ -353,12 +361,15 @@ function updateSelectedUI() {
 
 function getSelectedOrders() {
   if (selectedOrders.size === 0) return allOrders;
-  return allOrders.filter(o => selectedOrders.has(o.OrderID));
+  return allOrders.filter((o) => selectedOrders.has(o.OrderID));
 }
 
 function exportSelectedExcel() {
   const selected = getSelectedOrders();
-  if (selected.length === 0) { showToast("No orders selected", "info"); return; }
+  if (selected.length === 0) {
+    showToast("No orders selected", "info");
+    return;
+  }
   generateExcelFromData(selected);
 }
 
@@ -394,7 +405,9 @@ function deleteSelected() {
       try {
         await ApiService.deleteOrder(orderId);
         deleted++;
-      } catch (e) { console.error("Delete error:", e); }
+      } catch (e) {
+        console.error("Delete error:", e);
+      }
     }
     selectedOrders.clear();
     updateSelectedUI();
@@ -402,12 +415,17 @@ function deleteSelected() {
     loadDashboardStats();
     showToast(`${deleted} order berhasil dihapus`, "success");
   };
-  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+  overlay.onclick = (e) => {
+    if (e.target === overlay) overlay.remove();
+  };
 }
 
 function exportSelectedPDF() {
   const selected = getSelectedOrders();
-  if (selected.length === 0) { showToast("No orders selected", "info"); return; }
+  if (selected.length === 0) {
+    showToast("No orders selected", "info");
+    return;
+  }
   generatePDFFromData(selected);
 }
 
@@ -445,16 +463,20 @@ function generatePDFFromData(orders) {
       <table>
         <thead><tr><th>Order ID</th><th>Date</th><th>Requester</th><th>Department</th><th>Items</th><th>Status</th></tr></thead>
         <tbody>
-          ${orders.map(o => `
+          ${orders
+            .map(
+              (o) => `
             <tr>
               <td>${o.OrderID}</td>
               <td>${formatDate(o.Date)}</td>
               <td>${o.Users || "-"}</td>
               <td>${o.Department}</td>
-              <td class="items-cell">${o.ItemNames || (o.Items || []).map(it => it.ItemName).join(", ") || "-"}</td>
+              <td class="items-cell">${o.ItemNames || (o.Items || []).map((it) => it.ItemName).join(", ") || "-"}</td>
               <td><span class="badge badge-${statusClass(o.Status)}">${o.Status}</span></td>
             </tr>
-          `).join("")}
+          `,
+            )
+            .join("")}
         </tbody>
       </table>
       <div class="footer">Work Order Management System</div>
@@ -627,7 +649,9 @@ function renderDrawer(order) {
               </tr>
             </thead>
             <tbody>
-              ${(order.Items || []).map((it, idx) => `
+              ${(order.Items || [])
+                .map(
+                  (it, idx) => `
                 <tr class="border-b border-surface-50">
                   <td class="py-2 px-2 text-surface-500">${idx + 1}</td>
                   <td class="py-2 px-2 text-surface-700">${it.User || "-"}</td>
@@ -637,7 +661,9 @@ function renderDrawer(order) {
                   <td class="py-2 px-2 text-center text-surface-500">${it.Unit}</td>
                   <td class="py-2 px-2 text-center text-surface-500">${it.SaldoQty || 0} ${it.SaldoUom || it.Unit || ""}</td>
                 </tr>
-              `).join("")}
+              `,
+                )
+                .join("")}
             </tbody>
           </table>
         </div>
@@ -912,196 +938,338 @@ function exportExcel() {
   if (month) filters.month = month;
   if (year) filters.year = year;
 
-  ApiService.exportExcel(filters).then(res => {
-    if (res && res.success && res.data && res.data.length > 0) {
-      generateExcelFromData(res.data);
-    } else {
-      showToast("No data to export", "info");
-    }
-  }).catch(err => {
-    console.error("Export error:", err);
-    showToast("Export failed: " + (err.message || "Unknown error"), "error");
-  });
+  ApiService.exportExcel(filters)
+    .then((res) => {
+      if (res && res.success && res.data && res.data.length > 0) {
+        generateExcelFromData(res.data);
+      } else {
+        showToast("No data to export", "info");
+      }
+    })
+    .catch((err) => {
+      console.error("Export error:", err);
+      showToast("Export failed: " + (err.message || "Unknown error"), "error");
+    });
 }
 
 function generateExcelFromData(orders) {
-  if (!orders.length) {
-    showToast("No data to export", "info");
-    return;
+  if (!orders || !Array.isArray(orders) || orders.length === 0) {
+    throw new Error("Tidak ada data untuk diexport.");
   }
 
-  const monthNames = ["JANUARY","FEBRUARY","MARCH","APRIL","MAY","JUNE","JULY","AUGUST","SEPTEMBER","OCTOBER","NOVEMBER","DECEMBER"];
-
   const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("REKAP FORM", {
+    pageSetup: {
+      orientation: "landscape",
+      paperSize: 9,
+      fitToWidth: 1,
+      fitToHeight: 0,
+    },
+    pageMargins: {
+      left: 0.25,
+      right: 0.25,
+      top: 0.4,
+      bottom: 0.4,
+      header: 0.1,
+      footer: 0.1,
+    },
+    properties: { defaultRowHeight: 20 },
+  });
 
-  orders.forEach((o) => {
-    const items = o.Items || [];
-    if (items.length === 0) return;
+  // Hide gridlines
+  ws.views = [{ state: "frozen", ySplit: 6 }];
 
-    const sheetName = (o.OrderID || "Order").substring(0, 31).replace(/[\\\/\*\?\[\]]/g, "");
-    const ws = wb.addWorksheet(sheetName);
+  // =========================================================
+  // CONFIG
+  // =========================================================
 
-    const orderDate = new Date(o.Date);
-    const day = orderDate.getDate();
-    const month = monthNames[orderDate.getMonth()];
-    const year = orderDate.getFullYear();
+  const COMPANY_NAME = "PT.RRA TEKNOJAYA PERKASA";
+  const TITLE = "REKAP FORM REQUISITION";
+  const now = new Date();
+  const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const dayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  const year = now.getFullYear();
+  const dayNum = now.getDate();
+  const monthName = months[now.getMonth()];
+  const dayName = dayNames[now.getDay()];
+  const formattedDate = `${dayName}, ${monthName} ${String(dayNum).padStart(2, "0")}, ${year}`;
 
-    // Column widths (A-L)
-    ws.columns = [
-      { width: 5 },   // A: NO
-      { width: 18 },  // B: USER
-      { width: 12 },  // C: DEP
-      { width: 28 },  // D: DESCRIPTION
-      { width: 35 },  // E: SPECIFICATION
-      { width: 8 },   // F: ORDER QTY
-      { width: 8 },   // G: ORDER UOM
-      { width: 8 },   // H: SALDO QTY
-      { width: 8 },   // I: SALDO UOM
-      { width: 16 },  // J: NO. PR
-      { width: 8 },   // K: CLEAR
-    ];
+  // =========================================================
+  // COLUMN WIDTHS
+  // =========================================================
 
-    // Embed logo image
-    if (typeof LOGO_BASE64 !== "undefined" && LOGO_BASE64) {
-      const imgId = wb.addImage({ base64: LOGO_BASE64, extension: "png" });
-      ws.addImage(imgId, { tl: { col: 0, row: 0 }, br: { col: 3, row: 2 } });
+  ws.columns = [
+    { width: 5 },   // A: NO
+    { width: 20 },  // B: USER
+    { width: 14 },  // C: DEP
+    { width: 34 },  // D: DESCRIPTION
+    { width: 48 },  // E: SPECIFICATION
+    { width: 9 },   // F: ORDER QTY
+    { width: 9 },   // G: ORDER UOM
+    { width: 9 },   // H: SALDO QTY
+    { width: 9 },   // I: SALDO UOM
+    { width: 18 },  // J: NO. PR
+  ];
+
+  // =========================================================
+  // WHITE BACKGROUND - fill all cells used
+  // =========================================================
+
+  const whiteFill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFFF" } };
+  const noBorder = {};
+
+  function setWhiteBg(row, colCount) {
+    for (let c = 1; c <= colCount; c++) {
+      const cell = row.getCell(c);
+      cell.fill = whiteFill;
+      cell.font = cell.font || {};
+      cell.font.name = "Arial";
+      cell.font.size = 10;
+      cell.font.color = { argb: "FF000000" };
+      cell.border = noBorder;
     }
+  }
 
-    // Row 3: TAHUN (merged)
-    ws.mergeCells("J3:K3");
-    ws.getCell("J3").value = "TAHUN";
-    ws.getCell("J3").font = { bold: true, size: 10 };
-    ws.getCell("J3").alignment = { horizontal: "right" };
-    ws.getCell("L3").value = year;
-    ws.getCell("L3").font = { bold: true, size: 10 };
+  // =========================================================
+  // ROW 1: empty spacer
+  // =========================================================
 
-    // Row 4: TANGGAL (merged)
-    ws.mergeCells("J4:K4");
-    ws.getCell("J4").value = "TANGGAL";
-    ws.getCell("J4").font = { bold: true, size: 10 };
-    ws.getCell("J4").alignment = { horizontal: "right" };
-    ws.getCell("L4").value = day;
-    ws.getCell("L4").font = { bold: true, size: 10 };
+  const row1 = ws.getRow(1);
+  row1.height = 12;
+  setWhiteBg(row1, 10);
 
-    // Row 4 also has month in col A (merged with row 3)
-    ws.mergeCells("A3:B3");
-    ws.getCell("A3").value = month;
-    ws.getCell("A3").font = { bold: true, size: 10 };
+  // =========================================================
+  // ROW 2: Company name (left) — no border
+  // =========================================================
 
-    // Row 5: Date
-    ws.mergeCells("A5:D5");
-    ws.getCell("A5").value = orderDate;
-    ws.getCell("A5").numFmt = "DD MMMM YYYY";
+  const row2 = ws.getRow(2);
+  row2.height = 24;
+  setWhiteBg(row2, 10);
+  row2.getCell(1).value = COMPANY_NAME;
+  row2.getCell(1).font = { name: "Arial", size: 12, bold: true, color: { argb: "FF111111" } };
+  row2.getCell(1).alignment = { horizontal: "left", vertical: "center" };
 
-    // Row 6: Header NO, USER, DEP, DESCRIPTION, SPECIFICATION, ORDER, SALDO, NO. PR, CLEAR
-    const headerRow6 = ws.getRow(6);
-    headerRow6.getCell(1).value = "NO";
-    headerRow6.getCell(2).value = "USER";
-    headerRow6.getCell(3).value = "DEP";
-    headerRow6.getCell(4).value = "DESCRIPTION";
-    headerRow6.getCell(5).value = "SPECIFICATION";
-    headerRow6.getCell(6).value = "ORDER";
-    headerRow6.getCell(8).value = "SALDO";
-    headerRow6.getCell(10).value = "NO. PR";
-    headerRow6.getCell(11).value = "CLEAR";
+  // =========================================================
+  // ROW 3: Title (left) + TAHUN label + value (right)
+  // =========================================================
 
-    // Row 7: Sub-headers QTY, UOM, QTY, UOM
-    const headerRow7 = ws.getRow(7);
-    headerRow7.getCell(6).value = "QTY";
-    headerRow7.getCell(7).value = "UOM";
-    headerRow7.getCell(8).value = "QTY";
-    headerRow7.getCell(9).value = "UOM";
+  const row3 = ws.getRow(3);
+  row3.height = 28;
+  setWhiteBg(row3, 10);
+  row3.getCell(1).value = TITLE;
+  row3.getCell(1).font = { name: "Arial", size: 15, bold: true, color: { argb: "FF111111" } };
+  row3.getCell(1).alignment = { horizontal: "left", vertical: "center" };
 
-    // Merge header cells
-    ws.mergeCells("A6:A7");  // NO
-    ws.mergeCells("B6:B7");  // USER
-    ws.mergeCells("C6:C7");  // DEP
-    ws.mergeCells("D6:D7");  // DESCRIPTION
-    ws.mergeCells("E6:E7");  // SPECIFICATION
-    ws.mergeCells("F6:G6");  // ORDER
-    ws.mergeCells("H6:I6");  // SALDO
-    ws.mergeCells("J6:J7");  // NO. PR
-    ws.mergeCells("K6:K7");  // CLEAR
+  // TAHUN label + value
+  ws.mergeCells("H3:I3");
+  row3.getCell(8).value = "TAHUN";
+  row3.getCell(8).font = { name: "Arial", size: 9, bold: true, color: { argb: "FF555555" } };
+  row3.getCell(8).alignment = { horizontal: "right", vertical: "center" };
+  row3.getCell(8).fill = whiteFill;
 
-    // Style header rows
-    [headerRow6, headerRow7].forEach(row => {
-      row.eachCell({ includeEmpty: true }, (cell) => {
-        cell.font = { bold: true, size: 10 };
-        cell.alignment = { horizontal: "center", vertical: "middle" };
-        cell.border = {
-          top: { style: "thin" },
-          bottom: { style: "thin" },
-          left: { style: "thin" },
-          right: { style: "thin" },
-        };
-      });
-    });
-    headerRow6.height = 20;
-    headerRow7.height = 18;
+  row3.getCell(10).value = year;
+  row3.getCell(10).font = { name: "Arial", size: 10, bold: true, color: { argb: "FF111111" } };
+  row3.getCell(10).alignment = { horizontal: "right", vertical: "center" };
+  row3.getCell(10).fill = whiteFill;
 
-    // Data rows
-    let lastUser = "";
-    items.forEach((it, idx) => {
-      const rowNum = 8 + idx;
-      const row = ws.getRow(rowNum);
-      const currentUser = it.User || "";
+  // =========================================================
+  // ROW 4: Date (left) + TANGGAL label + value (right)
+  // =========================================================
 
-      row.getCell(1).value = idx + 1;
-      row.getCell(2).value = currentUser !== lastUser ? currentUser : "";
-      row.getCell(3).value = o.Department || "";
-      row.getCell(4).value = it.Description || "";
-      row.getCell(5).value = it.ItemName || "";
-      row.getCell(6).value = it.Quantity || 0;
-      row.getCell(7).value = it.Unit || "PCS";
-      row.getCell(8).value = it.SaldoQty || 0;
-      row.getCell(9).value = it.SaldoUom || it.Unit || "PCS";
-      row.getCell(10).value = o.NoPR || o.OrderID;
-      row.getCell(11).value = it.Clear ? "V" : "";
+  const row4 = ws.getRow(4);
+  row4.height = 20;
+  setWhiteBg(row4, 10);
+  row4.getCell(1).value = formattedDate;
+  row4.getCell(1).font = { name: "Arial", size: 9, color: { argb: "FF555555" } };
+  row4.getCell(1).alignment = { horizontal: "left", vertical: "center" };
 
-      lastUser = currentUser;
+  // TANGGAL label + value
+  ws.mergeCells("H4:I4");
+  row4.getCell(8).value = "TANGGAL";
+  row4.getCell(8).font = { name: "Arial", size: 9, bold: true, color: { argb: "FF555555" } };
+  row4.getCell(8).alignment = { horizontal: "right", vertical: "center" };
+  row4.getCell(8).fill = whiteFill;
 
-      row.eachCell({ includeEmpty: true }, (cell, colNum) => {
-        cell.border = {
-          top: { style: "thin" },
-          bottom: { style: "thin" },
-          left: { style: "thin" },
-          right: { style: "thin" },
-        };
-        if ([1, 6, 7, 8, 9, 11].includes(colNum)) {
-          cell.alignment = { horizontal: "center" };
-        }
-      });
-    });
+  row4.getCell(10).value = dayNum;
+  row4.getCell(10).font = { name: "Arial", size: 10, bold: true, color: { argb: "FF111111" } };
+  row4.getCell(10).alignment = { horizontal: "right", vertical: "center" };
+  row4.getCell(10).fill = whiteFill;
 
-    // Empty rows for signature area
-    for (let i = 0; i < 5; i++) {
-      const rowNum = 8 + items.length + i;
-      const row = ws.getRow(rowNum);
-      row.eachCell({ includeEmpty: true }, (cell) => {
-        cell.border = {
-          top: { style: "thin" },
-          bottom: { style: "thin" },
-          left: { style: "thin" },
-          right: { style: "thin" },
-        };
-      });
+  // =========================================================
+  // ROW 5-6: TABLE HEADERS (with merges)
+  // =========================================================
+
+  const thinBlack = {
+    top: { style: "thin", color: { argb: "FF000000" } },
+    bottom: { style: "thin", color: { argb: "FF000000" } },
+    left: { style: "thin", color: { argb: "FF000000" } },
+    right: { style: "thin", color: { argb: "FF000000" } },
+  };
+
+  const headerFont = { name: "Arial", size: 9, bold: true, color: { argb: "FF000000" } };
+  const headerAlign = { horizontal: "center", vertical: "center", wrapText: true };
+
+  // Merge header cells vertically (row 5-6)
+  ws.mergeCells("A5:A6"); // NO
+  ws.mergeCells("B5:B6"); // USER
+  ws.mergeCells("C5:C6"); // DEP
+  ws.mergeCells("D5:D6"); // DESCRIPTION
+  ws.mergeCells("E5:E6"); // SPECIFICATION
+  ws.mergeCells("J5:J6"); // NO. PR
+
+  // Merge ORDER horizontally (F5:G5)
+  ws.mergeCells("F5:G5");
+  // Merge SALDO horizontally (H5:I5)
+  ws.mergeCells("H5:I5");
+
+  // Row 5 values
+  const r5 = ws.getRow(5);
+  r5.height = 25;
+  r5.getCell(1).value = "NO";
+  r5.getCell(2).value = "USER";
+  r5.getCell(3).value = "DEP";
+  r5.getCell(4).value = "DESCRIPTION";
+  r5.getCell(5).value = "SPECIFICATION";
+  r5.getCell(6).value = "ORDER";
+  r5.getCell(8).value = "SALDO";
+  r5.getCell(10).value = "NO. PR";
+
+  // Row 6 sub-headers
+  const r6 = ws.getRow(6);
+  r6.height = 22;
+  r6.getCell(6).value = "QTY";
+  r6.getCell(7).value = "UOM";
+  r6.getCell(8).value = "QTY";
+  r6.getCell(9).value = "UOM";
+
+  // Apply header style to rows 5-6
+  [r5, r6].forEach(row => {
+    for (let c = 1; c <= 10; c++) {
+      const cell = row.getCell(c);
+      cell.fill = whiteFill;
+      cell.font = headerFont;
+      cell.alignment = headerAlign;
+      cell.border = thinBlack;
     }
   });
 
-  const filename = "Work_Orders_" + new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  wb.xlsx.writeBuffer().then(buffer => {
-    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  // =========================================================
+  // DATA ROWS
+  // =========================================================
+
+  let rowNum = 7;
+  let itemNumber = 1;
+
+  const bodyFont = { name: "Arial", size: 9, color: { argb: "FF000000" } };
+  const bodyAlignLeft = { horizontal: "left", vertical: "center", wrapText: true };
+  const bodyAlignCenter = { horizontal: "center", vertical: "center", wrapText: true };
+
+  orders.forEach((order) => {
+    const items = Array.isArray(order.Items) ? order.Items : Array.isArray(order.items) ? order.items : [];
+
+    if (items.length === 0) {
+      const row = ws.getRow(rowNum);
+      row.height = 25;
+      row.getCell(1).value = itemNumber++;
+      row.getCell(2).value = order.User || order.user || "";
+      row.getCell(3).value = order.Department || order.department || "";
+      row.getCell(4).value = order.Description || order.description || "";
+      row.getCell(5).value = order.ItemName || order.itemName || "";
+      row.getCell(6).value = order.Quantity || order.quantity || 0;
+      row.getCell(7).value = order.Unit || order.unit || "PCS";
+      row.getCell(8).value = order.SaldoQty || order.saldoQty || 0;
+      row.getCell(9).value = order.SaldoUom || order.saldoUom || order.Unit || "PCS";
+      row.getCell(10).value = order.NoPR || order.noPR || order.OrderID || order.orderID || "";
+
+      for (let c = 1; c <= 10; c++) {
+        const cell = row.getCell(c);
+        cell.fill = whiteFill;
+        cell.font = bodyFont;
+        cell.alignment = [1, 6, 7, 8, 9, 10].includes(c) ? bodyAlignCenter : bodyAlignLeft;
+        cell.border = thinBlack;
+      }
+      rowNum++;
+      return;
+    }
+
+    items.forEach((item) => {
+      const row = ws.getRow(rowNum);
+      row.height = 25;
+
+      row.getCell(1).value = itemNumber++;
+      row.getCell(2).value = order.User || order.user || item.User || item.user || "";
+      row.getCell(3).value = order.Department || order.department || item.Department || item.department || "";
+      row.getCell(4).value = item.Description || item.description || "";
+      row.getCell(5).value = item.ItemName || item.itemName || item.Specification || item.specification || "";
+      row.getCell(6).value = item.Quantity || item.quantity || 0;
+      row.getCell(7).value = item.Unit || item.unit || "PCS";
+      row.getCell(8).value = item.SaldoQty || item.saldoQty || 0;
+      row.getCell(9).value = item.SaldoUom || item.saldoUom || item.Unit || item.unit || "PCS";
+      row.getCell(10).value = order.NoPR || order.noPR || order.OrderID || order.orderID || "";
+
+      for (let c = 1; c <= 10; c++) {
+        const cell = row.getCell(c);
+        cell.fill = whiteFill;
+        cell.font = bodyFont;
+        cell.alignment = [1, 6, 7, 8, 9, 10].includes(c) ? bodyAlignCenter : bodyAlignLeft;
+        cell.border = thinBlack;
+      }
+      rowNum++;
+    });
+  });
+
+  // =========================================================
+  // EMPTY ROWS (signature area) — white, no border
+  // =========================================================
+
+  for (let i = 0; i < 5; i++) {
+    const row = ws.getRow(rowNum);
+    row.height = 20;
+    setWhiteBg(row, 10);
+    rowNum++;
+  }
+
+  // =========================================================
+  // LOGO IMAGE (top-left)
+  // =========================================================
+
+  if (typeof LOGO_BASE64 !== "undefined" && LOGO_BASE64) {
+    const imgId = wb.addImage({ base64: LOGO_BASE64, extension: "png" });
+    ws.addImage(imgId, {
+      tl: { col: 0, row: 0 },
+      br: { col: 3, row: 2 },
+    });
+  }
+
+  // =========================================================
+  // PRINT AREA
+  // =========================================================
+
+  ws.pageSetup.printArea = `A1:J${rowNum - 1}`;
+
+  // =========================================================
+  // EXPORT
+  // =========================================================
+
+  const filename = `REKAP_FORM_REQUISITION_${year}.xlsx`;
+
+  wb.xlsx.writeBuffer().then((buffer) => {
+    const blob = new Blob([buffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = filename + ".xlsx";
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
     showToast("Excel downloaded", "success");
-  }).catch(err => {
+  }).catch((err) => {
     console.error("Excel export error:", err);
     showToast("Export failed: " + err.message, "error");
   });
+
+  return { success: true, filename: filename };
 }
 
 // ========================================

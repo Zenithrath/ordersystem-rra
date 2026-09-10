@@ -582,8 +582,8 @@ function exportExcel(params) {
     ["In Progress", filtered.filter(o => o.Status === "In Progress").length],
     ["Completed", filtered.filter(o => o.Status === "Completed").length],
     ["Cancelled", filtered.filter(o => o.Status === "Cancelled").length],
-    [""],
-    ["Department Breakdown"],
+    ["", ""],
+    ["Department Breakdown", ""],
   ];
 
   // Department counts

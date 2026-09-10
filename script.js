@@ -1147,7 +1147,7 @@ async function generateExcelFromData(orders) {
 
     ws.mergeCells("A5:D5");
     const row5 = ws.getRow(5);
-    row5.height = 20;
+    row5.height = 30;
     fillWhite(row5, 11);
     row5.getCell(1).value = formattedDate;
     row5.getCell(1).font = { name: "Calibri", size: 10, color: { argb: "FF000000" } };
@@ -1169,7 +1169,7 @@ async function generateExcelFromData(orders) {
     ws.mergeCells("H6:I6"); // SALDO
 
     const r6 = ws.getRow(6);
-    r6.height = 22;
+    r6.height = 28;
     fillWhite(r6, 11);
     r6.getCell(1).value = "NO";
     r6.getCell(2).value = "USER";
@@ -1313,8 +1313,8 @@ function exportWorkOrderPDF() {
       <title>Order ${o.OrderID}</title>
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        @page { size: A4 landscape; margin: 10mm; }
-        body { font-family: Calibri, Arial, sans-serif; padding: 24px; color: #000; background: #fff; font-size: 10pt; }
+        @page { size: A4 portrait; margin: 10mm; }
+        body { font-family: Calibri, Arial, sans-serif; padding: 16px; color: #000; background: #fff; font-size: 9pt; }
         .top { display: flex; justify-content: space-between; align-items: flex-start; }
         .logo img { width: 228px; height: 40px; object-fit: contain; }
         .info { text-align: right; font-size: 10pt; }
@@ -1323,7 +1323,7 @@ function exportWorkOrderPDF() {
         .title { text-align: center; font-size: 14pt; font-weight: bold; margin: 12px 0 4px; }
         .docdate { font-size: 10pt; border-bottom: 2px solid #000; padding-bottom: 4px; margin-bottom: 12px; }
         table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
-        th, td { border: 1px solid #000; padding: 4px 6px; font-size: 9.5pt; vertical-align: middle; }
+        th, td { border: 1px solid #000; padding: 3px 4px; font-size: 8.5pt; vertical-align: middle; }
         th { text-align: center; font-weight: bold; }
         td.c { text-align: center; }
         .sig { display: flex; justify-content: flex-end; margin-top: 28px; page-break-inside: avoid; }

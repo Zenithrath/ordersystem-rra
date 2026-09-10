@@ -387,7 +387,7 @@ function deleteSelected() {
     let deleted = 0;
     for (const orderId of selected) {
       try {
-        await callAPI({ action: "deleteOrder", id: orderId });
+        await ApiService.deleteOrder(orderId);
         deleted++;
       } catch (e) { console.error("Delete error:", e); }
     }

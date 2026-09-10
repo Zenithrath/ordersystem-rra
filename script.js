@@ -318,15 +318,19 @@ function updateSelectedUI() {
   const count = selectedOrders.size;
   const btnPdf = document.getElementById("btn-export-selected-pdf");
   const btnExcel = document.getElementById("btn-export-selected-excel");
+  const btnDelete = document.getElementById("btn-delete-selected");
 
   if (count > 0) {
     btnPdf.classList.remove("hidden");
     btnExcel.classList.remove("hidden");
+    btnDelete.classList.remove("hidden");
     document.getElementById("selected-count-pdf").textContent = count;
     document.getElementById("selected-count-excel").textContent = count;
+    document.getElementById("selected-count-delete").textContent = count;
   } else {
     btnPdf.classList.add("hidden");
     btnExcel.classList.add("hidden");
+    btnDelete.classList.add("hidden");
   }
 
   // Update select-all checkbox state
@@ -351,6 +355,49 @@ function exportSelectedExcel() {
   const selected = getSelectedOrders();
   if (selected.length === 0) { showToast("No orders selected", "info"); return; }
   generateExcelFromData(selected);
+}
+
+function deleteSelected() {
+  const selected = Array.from(selectedOrders);
+  if (selected.length === 0) return;
+
+  const overlay = document.createElement("div");
+  overlay.className = "fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-4";
+  overlay.innerHTML = `
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+          <i data-lucide="alert-triangle" class="w-5 h-5 text-red-600"></i>
+        </div>
+        <h3 class="text-lg font-semibold text-surface-800">Hapus Order?</h3>
+      </div>
+      <p class="text-sm text-surface-600 mb-6">Yakin ingin menghapus <strong>${selected.length}</strong> order yang dipilih? Tindakan ini tidak dapat dibatalkan.</p>
+      <div class="flex gap-3 justify-end">
+        <button id="popup-cancel" class="px-4 py-2 text-sm font-medium text-surface-600 bg-surface-100 rounded-xl hover:bg-surface-200 transition-colors">Batal</button>
+        <button id="popup-confirm" class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-xl hover:bg-red-700 transition-colors">Ya, Hapus</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  lucide.createIcons();
+
+  overlay.querySelector("#popup-cancel").onclick = () => overlay.remove();
+  overlay.querySelector("#popup-confirm").onclick = async () => {
+    overlay.remove();
+    let deleted = 0;
+    for (const orderId of selected) {
+      try {
+        await callAPI({ action: "deleteOrder", id: orderId });
+        deleted++;
+      } catch (e) { console.error("Delete error:", e); }
+    }
+    selectedOrders.clear();
+    updateSelectedUI();
+    loadOrders(currentPage);
+    loadDashboardStats();
+    showToast(`${deleted} order berhasil dihapus`, "success");
+  };
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
 }
 
 function exportSelectedPDF() {

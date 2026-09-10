@@ -482,19 +482,19 @@ function exportExcel(params) {
   // Title row
   tempSheet.getRange("A1").setValue("PT. RRA — Work Orders Report");
   tempSheet.getRange("A1").setFontSize(14).setFontWeight("bold").setFontColor("#115e59");
-  tempSheet.merge("A1:H1");
+  tempSheet.getRange("A1:H1").merge();
 
   // Subtitle
   const now = new Date();
   const dateStr = Utilities.formatDate(now, "Asia/Jakarta", "dd MMM yyyy HH:mm");
   tempSheet.getRange("A2").setValue("Generated: " + dateStr);
   tempSheet.getRange("A2").setFontSize(9).setFontColor("#64748b");
-  tempSheet.merge("A2:H2");
+  tempSheet.getRange("A2:H2").merge();
 
   // Summary row
   tempSheet.getRange("A3").setValue("Total Orders: " + filtered.length);
   tempSheet.getRange("A3").setFontSize(9).setFontColor("#64748b");
-  tempSheet.merge("A3:H3");
+  tempSheet.getRange("A3:H3").merge();
 
   // Headers
   const headers = ["Order ID", "Date", "Requester", "Department", "Purpose", "Items", "Status", "Notes"];

@@ -86,9 +86,17 @@ function readOrders() {
     if (!oid) continue;
 
     if (!orderMap[oid]) {
+      // Format date properly
+      let dateVal = r[1];
+      if (dateVal instanceof Date) {
+        dateVal = Utilities.formatDate(dateVal, "Asia/Jakarta", "yyyy-MM-dd");
+      } else {
+        dateVal = String(dateVal || "");
+      }
+
       orderMap[oid] = {
         OrderID: oid,
-        Date: r[1] || "",
+        Date: dateVal,
         RequesterName: String(r[2] || ""),
         Department: String(r[3] || ""),
         Purpose: String(r[4] || ""),

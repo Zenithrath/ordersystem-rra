@@ -9,8 +9,8 @@ const CACHE_TTL = 180;
 const COL_COUNT = 13;
 
 const HEADERS = [
-  "OrderID", "Date", "RequesterName", "Department", "Purpose", "Status",
-  "ItemName", "Quantity", "Unit", "SaldoQty", "SaldoUom", "NoPR", "Clear"
+  "OrderID", "Date", "Department", "Purpose", "Status",
+  "User", "ItemName", "Quantity", "Unit", "SaldoQty", "SaldoUom", "NoPR", "Clear"
 ];
 
 function doGet(e) {
@@ -100,18 +100,19 @@ function readOrders() {
       orderMap[oid] = {
         OrderID: oid,
         Date: dateVal,
-        RequesterName: String(r[2] || ""),
-        Department: String(r[3] || ""),
-        Purpose: String(r[4] || ""),
-        Status: String(r[5] || "Pending"),
+        Department: String(r[2] || ""),
+        Purpose: String(r[3] || ""),
+        Status: String(r[4] || "Pending"),
         Items: []
       };
       orderKeys.push(oid);
     }
 
     const itemName = String(r[6] || "").trim();
+    const userName = String(r[5] || "").trim();
     if (itemName) {
       orderMap[oid].Items.push({
+        User: userName,
         ItemName: itemName,
         Quantity: parseInt(r[7]) || 0,
         Unit: String(r[8] || "pcs"),
@@ -126,6 +127,7 @@ function readOrders() {
     const o = orderMap[oid];
     o.ItemCount = o.Items.length;
     o.ItemNames = o.Items.map(it => it.ItemName + " (" + it.Quantity + " " + it.Unit + ")").join(", ");
+    o.Users = [...new Set(o.Items.map(it => it.User).filter(u => u))].join(", ");
     o.NoPR = oid;
     o.Clear = o.Items.every(it => it.Clear);
     return o;
@@ -220,10 +222,10 @@ function migrateData() {
       newRows.push([
         oid,
         dateVal,
-        String(r[colIdx["RequesterName"] || 2] || ""),
         String(r[colIdx["Department"] || 3] || ""),
         String(r[colIdx["Purpose"] || 4] || ""),
         String(r[colIdx["Status"] || 6] || "Pending"),
+        it.User || it.user || "",
         it.ItemName || it.itemName || "",
         parseInt(it.Quantity || it.quantity) || 0,
         it.Unit || it.unit || "pcs",
@@ -257,7 +259,7 @@ function getOrders(params) {
     const q = params.q.toLowerCase();
     enriched = enriched.filter(o =>
       (o.OrderID && o.OrderID.toLowerCase().includes(q)) ||
-      (o.RequesterName && o.RequesterName.toLowerCase().includes(q)) ||
+      (o.Users && o.Users.toLowerCase().includes(q)) ||
       (o.ItemNames && o.ItemNames.toLowerCase().includes(q))
     );
   }
@@ -333,8 +335,8 @@ function getDepartments() {
 }
 
 function createOrder(body) {
-  const { date, requesterName, department, purpose, items } = body;
-  if (!requesterName || !department || !items || items.length === 0) {
+  const { date, department, purpose, items } = body;
+  if (!department || !items || items.length === 0) {
     return { success: false, message: "Missing required fields" };
   }
 
@@ -343,8 +345,9 @@ function createOrder(body) {
   const sheet = getSheet(SHEET_ORDERS);
 
   const rows = items.map(it => [
-    orderId, orderDate, requesterName, department,
+    orderId, orderDate, department,
     purpose || "", "Pending",
+    it.user || "",
     it.itemName || "",
     parseInt(it.quantity) || 0,
     it.unit || "pcs",
@@ -363,7 +366,7 @@ function createOrder(body) {
 }
 
 function updateOrder(body) {
-  const { orderId, date, requesterName, department, purpose, items } = body;
+  const { orderId, date, department, purpose, items } = body;
   if (!orderId) return { success: false, message: "Order ID is required" };
 
   const sheet = getSheet(SHEET_ORDERS);
@@ -380,13 +383,14 @@ function updateOrder(body) {
   }
 
   // Get current status from first deleted row
-  const oldStatus = data[startRow[0] - 1][5] || "Pending";
+  const oldStatus = data[startRow[0] - 1][4] || "Pending";
 
   // Insert new rows
   const orderDate = date || data[startRow[0] - 1][1];
-  const rows = (items && items.length > 0 ? items : [{ itemName: "", quantity: 0, unit: "pcs", saldoQty: 0, saldoUom: "pcs", clear: false }]).map(it => [
-    orderId, orderDate, requesterName || "",
+  const rows = (items && items.length > 0 ? items : [{ user: "", itemName: "", quantity: 0, unit: "pcs", saldoQty: 0, saldoUom: "pcs", clear: false }]).map(it => [
+    orderId, orderDate,
     department || "", purpose || "", oldStatus,
+    it.user || "",
     it.itemName || "",
     parseInt(it.quantity) || 0,
     it.unit || "pcs",
@@ -413,7 +417,7 @@ function updateOrderStatus(body) {
   const data = sheet.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] === orderId) {
-      sheet.getRange(i + 1, 6).setValue(status);
+      sheet.getRange(i + 1, 5).setValue(status);
     }
   }
   CacheService.getScriptCache().remove("dashboard_stats");
@@ -443,7 +447,7 @@ function exportExcel(params) {
   let orders = readOrders();
   if (params.q) {
     const q = params.q.toLowerCase();
-    orders = orders.filter(o => (o.OrderID && o.OrderID.toLowerCase().includes(q)) || (o.RequesterName && o.RequesterName.toLowerCase().includes(q)) || (o.ItemNames && o.ItemNames.toLowerCase().includes(q)));
+    orders = orders.filter(o => (o.OrderID && o.OrderID.toLowerCase().includes(q)) || (o.Users && o.Users.toLowerCase().includes(q)) || (o.ItemNames && o.ItemNames.toLowerCase().includes(q)));
   }
   if (params.status) orders = orders.filter(o => o.Status === params.status);
   if (params.department) orders = orders.filter(o => o.Department === params.department);
@@ -547,10 +551,11 @@ function generateSampleData() {
         const qty = 1 + Math.floor(Math.random() * 50);
         const saldoQty = Math.floor(Math.random() * 10);
         const clear = Math.random() > 0.7;
+        const userName = names[Math.floor(Math.random() * names.length)];
 
         rows.push([
-          orderId, dateStr, name, dept, desc, status,
-          item.name, qty, item.unit,
+          orderId, dateStr, dept, desc, status,
+          userName, item.name, qty, item.unit,
           saldoQty, item.unit,
           orderId, clear
         ]);

@@ -115,7 +115,7 @@ function renderRecentOrders(orders) {
         </div>
         <div class="min-w-0">
           <p class="text-sm font-medium text-surface-800 truncate">${o.OrderID}</p>
-          <p class="text-xs text-surface-400 truncate">${o.RequesterName} &middot; ${o.Department}</p>
+          <p class="text-xs text-surface-400 truncate">${o.Users || ""} &middot; ${o.Department}</p>
         </div>
       </div>
       <div class="text-right shrink-0 ml-3">
@@ -214,11 +214,11 @@ function renderOrdersTable() {
       </td>
       <td class="px-5 py-4 text-sm font-medium text-surface-800 cursor-pointer" onclick="openOrderDetail('${o.OrderID}')">${o.OrderID}</td>
       <td class="px-5 py-4 text-sm text-surface-500 hidden sm:table-cell cursor-pointer" onclick="openOrderDetail('${o.OrderID}')">${formatDate(o.Date)}</td>
-      <td class="px-5 py-4 cursor-pointer" onclick="openOrderDetail('${o.OrderID}')">
-        <p class="text-sm text-surface-800">${o.RequesterName}</p>
-      </td>
       <td class="px-5 py-4 hidden md:table-cell cursor-pointer" onclick="openOrderDetail('${o.OrderID}')">
         <p class="text-sm text-surface-500">${o.Department}</p>
+      </td>
+      <td class="px-5 py-4 cursor-pointer" onclick="openOrderDetail('${o.OrderID}')">
+        <p class="text-sm text-surface-800 truncate max-w-[120px]" title="${o.Users || ""}">${o.Users || "-"}</p>
       </td>
       <td class="px-5 py-4 hidden lg:table-cell cursor-pointer" onclick="openOrderDetail('${o.OrderID}')">
         <p class="text-sm text-surface-500 truncate max-w-[150px]" title="${o.Purpose || ""}">${o.Purpose || "-"}</p>
@@ -453,7 +453,7 @@ function generatePDFFromData(orders) {
             <tr>
               <td>${o.OrderID}</td>
               <td>${formatDate(o.Date)}</td>
-              <td>${o.RequesterName}</td>
+              <td>${o.Users || "-"}</td>
               <td>${o.Department}</td>
               <td class="items-cell">${o.ItemNames || (o.Items || []).map(it => it.ItemName).join(", ") || "-"}</td>
               <td><span class="badge badge-${statusClass(o.Status)}">${o.Status}</span></td>
@@ -604,7 +604,7 @@ function renderDrawer(order) {
         </div>
         <div>
           <p class="text-[11px] font-medium text-surface-400 uppercase tracking-wider mb-1">USER</p>
-          <p class="text-sm text-surface-800">${order.RequesterName}</p>
+          <p class="text-sm text-surface-800">${order.Users || "-"}</p>
         </div>
         <div>
           <p class="text-[11px] font-medium text-surface-400 uppercase tracking-wider mb-1">DEP</p>
@@ -622,6 +622,7 @@ function renderDrawer(order) {
             <thead>
               <tr class="text-[10px] font-medium text-surface-400 uppercase border-b border-surface-100">
                 <th class="text-left py-2 px-2">NO</th>
+                <th class="text-left py-2 px-2">USER</th>
                 <th class="text-left py-2 px-2">SPECIFICATION</th>
                 <th class="text-center py-2 px-2">QTY</th>
                 <th class="text-center py-2 px-2">UOM</th>
@@ -633,6 +634,7 @@ function renderDrawer(order) {
               ${(order.Items || []).map((it, idx) => `
                 <tr class="border-b border-surface-50">
                   <td class="py-2 px-2 text-surface-500">${idx + 1}</td>
+                  <td class="py-2 px-2 text-surface-700">${it.User || "-"}</td>
                   <td class="py-2 px-2 font-medium text-surface-800">${it.ItemName}</td>
                   <td class="py-2 px-2 text-center text-surface-700">${it.Quantity}</td>
                   <td class="py-2 px-2 text-center text-surface-500">${it.Unit}</td>
@@ -735,7 +737,8 @@ function addItemRow() {
   const row = document.createElement("div");
   row.className = "item-row";
   row.innerHTML = `
-    <input type="text" placeholder="SPECIFICATION (item name)" required class="item-name px-3 py-2.5 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 flex-1 min-w-[180px]" />
+    <input type="text" placeholder="USER" required class="item-user px-3 py-2.5 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 w-32" />
+    <input type="text" placeholder="SPECIFICATION (item name)" required class="item-name px-3 py-2.5 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 flex-1 min-w-[150px]" />
     <input type="number" placeholder="QTY" min="0" value="1" required class="item-qty px-3 py-2 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 w-20" />
     <select class="item-unit px-3 py-2.5 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400">
       ${CONFIG.UNITS.map((u) => `<option value="${u}">${u}</option>`).join("")}
@@ -762,6 +765,7 @@ function getFormData() {
     const name = row.querySelector(".item-name").value.trim();
     if (name) {
       items.push({
+        user: row.querySelector(".item-user").value.trim(),
         itemName: name,
         quantity: parseInt(row.querySelector(".item-qty").value) || 1,
         unit: row.querySelector(".item-unit").value,
@@ -774,7 +778,6 @@ function getFormData() {
 
   return {
     date: document.getElementById("form-date").value,
-    requesterName: document.getElementById("form-requester").value.trim(),
     department: document.getElementById("form-department").value,
     purpose: document.getElementById("form-purpose").value.trim(),
     items,
@@ -840,7 +843,6 @@ function editOrder(orderId) {
   setTimeout(() => {
     document.getElementById("form-order-id").value = orderId;
     document.getElementById("form-date").value = order.Date || "";
-    document.getElementById("form-requester").value = order.RequesterName || "";
     document.getElementById("form-department").value = order.Department || "";
     document.getElementById("form-purpose").value = order.Purpose || "";
 
@@ -850,6 +852,7 @@ function editOrder(orderId) {
       addItemRow();
       const rows = container.querySelectorAll(".item-row");
       const lastRow = rows[rows.length - 1];
+      lastRow.querySelector(".item-user").value = it.User || "";
       lastRow.querySelector(".item-name").value = it.ItemName || "";
       lastRow.querySelector(".item-qty").value = it.Quantity || 1;
       lastRow.querySelector(".item-unit").value = it.Unit || "pcs";
@@ -867,7 +870,6 @@ function resetForm() {
   editingOrderId = null;
   document.getElementById("form-order-id").value = "";
   document.getElementById("form-date").value = new Date().toISOString().slice(0, 10);
-  document.getElementById("form-requester").value = "";
   document.getElementById("form-department").value = "";
   document.getElementById("form-purpose").value = "";
   document.getElementById("items-container").innerHTML = "";
@@ -899,12 +901,11 @@ function exportExcel() {
       const mapped = res.data.map(o => ({
         OrderID: o["Order ID"] || o.OrderID || "",
         Date: o.Date || "",
-        RequesterName: o.Requester || o.RequesterName || "",
+        Users: o.Users || "",
         Department: o.Department || "",
         Purpose: o.Purpose || "",
         ItemNames: o.Items || o.ItemNames || "",
-        Status: o.Status || "",
-        Notes: o.Notes || ""
+        Status: o.Status || ""
       }));
       generateExcelFromData(mapped);
     } else {
@@ -959,7 +960,7 @@ function generateExcelFromData(orders) {
     items.forEach((it, idx) => {
       rows.push([
         idx + 1,
-        o.RequesterName || "",
+        it.User || "",
         o.Department || "",
         o.Purpose || "",
         it.ItemName || "",
@@ -1105,7 +1106,7 @@ function exportWorkOrderPDF() {
       <div class="grid">
         <div><div class="label">Order Date</div><div class="value">${formatDate(o.Date)}</div></div>
         <div><div class="label">NO. PR</div><div class="value">${o.NoPR || o.OrderID}</div></div>
-        <div><div class="label">USER</div><div class="value">${o.RequesterName}</div></div>
+        <div><div class="label">USER</div><div class="value">${o.Users || "-"}</div></div>
         <div><div class="label">DEP</div><div class="value">${o.Department}</div></div>
         <div><div class="label">DESCRIPTION</div><div class="value">${o.Purpose || "-"}</div></div>
       </div>

@@ -144,9 +144,10 @@ function showOrdersSkeleton() {
       <td class="px-5 py-4 hidden sm:table-cell"><div class="skeleton h-4 w-20 rounded"></div></td>
       <td class="px-5 py-4"><div class="skeleton h-4 w-24 rounded"></div></td>
       <td class="px-5 py-4 hidden md:table-cell"><div class="skeleton h-4 w-24 rounded"></div></td>
+      <td class="px-5 py-4 hidden lg:table-cell"><div class="skeleton h-4 w-20 rounded"></div></td>
       <td class="px-5 py-4"><div class="skeleton h-4 w-32 rounded"></div></td>
       <td class="px-5 py-4 text-center"><div class="skeleton h-5 w-16 rounded-full mx-auto"></div></td>
-      <td class="px-5 py-4 hidden lg:table-cell"><div class="skeleton h-4 w-24 rounded"></div></td>
+      <td class="px-5 py-4 text-center"><div class="skeleton h-4 w-6 rounded"></div></td>
       <td class="px-5 py-4 text-right"><div class="skeleton h-4 w-12 rounded ml-auto"></div></td>
     </tr>
   `,
@@ -191,7 +192,7 @@ function renderOrdersTable() {
   if (!allOrders.length) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="8" class="px-5 py-12 text-center text-sm text-surface-400">
+        <td colspan="9" class="px-5 py-12 text-center text-sm text-surface-400">
           <i data-lucide="search" class="w-10 h-10 mx-auto mb-2 text-surface-300"></i>
           No orders found
         </td>
@@ -205,6 +206,7 @@ function renderOrdersTable() {
       (o) => {
         const checked = selectedOrders.has(o.OrderID) ? "checked" : "";
         const itemNames = o.ItemNames || (o.Items || []).map(it => it.ItemName).join(", ");
+        const allClear = o.Items && o.Items.length > 0 && o.Items.every(it => it.Clear);
         return `
     <tr class="${selectedOrders.has(o.OrderID) ? 'bg-primary-50/50' : ''}">
       <td class="px-5 py-4 w-10">
@@ -218,14 +220,17 @@ function renderOrdersTable() {
       <td class="px-5 py-4 hidden md:table-cell cursor-pointer" onclick="openOrderDetail('${o.OrderID}')">
         <p class="text-sm text-surface-500">${o.Department}</p>
       </td>
+      <td class="px-5 py-4 hidden lg:table-cell cursor-pointer" onclick="openOrderDetail('${o.OrderID}')">
+        <p class="text-sm text-surface-500 truncate max-w-[150px]" title="${o.Purpose || ""}">${o.Purpose || "-"}</p>
+      </td>
       <td class="px-5 py-4 cursor-pointer" onclick="openOrderDetail('${o.OrderID}')">
         <p class="text-sm text-surface-600 truncate max-w-[200px]" title="${itemNames}">${itemNames || "-"}</p>
       </td>
       <td class="px-5 py-4 text-center cursor-pointer" onclick="openOrderDetail('${o.OrderID}')">
         <span class="badge badge-${statusClass(o.Status)}">${o.Status}</span>
       </td>
-      <td class="px-5 py-4 hidden lg:table-cell cursor-pointer" onclick="openOrderDetail('${o.OrderID}')">
-        <p class="text-sm text-surface-500 truncate max-w-[150px]" title="${o.Notes || ""}">${o.Notes || "-"}</p>
+      <td class="px-5 py-4 text-center cursor-pointer" onclick="openOrderDetail('${o.OrderID}')">
+        ${allClear ? '<span class="text-green-500 text-lg">&#10003;</span>' : '<span class="text-surface-300 text-lg">&#10007;</span>'}
       </td>
       <td class="px-5 py-4 text-right">
         <button onclick="event.stopPropagation(); openOrderDetail('${o.OrderID}')" class="text-xs font-medium text-primary-500 hover:text-primary-600 transition-colors">
@@ -594,48 +599,49 @@ function renderDrawer(order) {
       </div>
       <div class="grid grid-cols-2 gap-4">
         <div>
-          <p class="text-[11px] font-medium text-surface-400 uppercase tracking-wider mb-1">Date</p>
-          <p class="text-sm text-surface-800">${formatDate(order.Date)}</p>
+          <p class="text-[11px] font-medium text-surface-400 uppercase tracking-wider mb-1">NO. PR</p>
+          <p class="text-sm text-surface-800">${order.NoPR || order.OrderID}</p>
         </div>
         <div>
-          <p class="text-[11px] font-medium text-surface-400 uppercase tracking-wider mb-1">Requester</p>
+          <p class="text-[11px] font-medium text-surface-400 uppercase tracking-wider mb-1">USER</p>
           <p class="text-sm text-surface-800">${order.RequesterName}</p>
         </div>
         <div>
-          <p class="text-[11px] font-medium text-surface-400 uppercase tracking-wider mb-1">Department</p>
+          <p class="text-[11px] font-medium text-surface-400 uppercase tracking-wider mb-1">DEP</p>
           <p class="text-sm text-surface-800">${order.Department}</p>
         </div>
         <div>
-          <p class="text-[11px] font-medium text-surface-400 uppercase tracking-wider mb-1">Purpose</p>
+          <p class="text-[11px] font-medium text-surface-400 uppercase tracking-wider mb-1">DESCRIPTION</p>
           <p class="text-sm text-surface-800">${order.Purpose || "-"}</p>
         </div>
       </div>
-      ${
-        order.Notes
-          ? `
-        <div>
-          <p class="text-[11px] font-medium text-surface-400 uppercase tracking-wider mb-1">Notes</p>
-          <p class="text-sm text-surface-700 bg-surface-50 rounded-xl p-3">${order.Notes}</p>
-        </div>
-      `
-          : ""
-      }
       <div>
         <p class="text-[11px] font-medium text-surface-400 uppercase tracking-wider mb-2">Items</p>
-        <div class="space-y-2">
-          ${(order.Items || [])
-            .map(
-              (it) => `
-            <div class="flex items-center justify-between bg-surface-50 rounded-xl px-3 py-2.5">
-              <div class="min-w-0">
-                <p class="text-sm font-medium text-surface-800 truncate">${it.ItemName}</p>
-                ${it.Notes ? `<p class="text-xs text-surface-400 truncate">${it.Notes}</p>` : ""}
-              </div>
-              <span class="text-sm font-semibold text-surface-700 shrink-0 ml-3">${it.Quantity} ${it.Unit}</span>
-            </div>
-          `,
-            )
-            .join("")}
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-[10px] font-medium text-surface-400 uppercase border-b border-surface-100">
+                <th class="text-left py-2 px-2">NO</th>
+                <th class="text-left py-2 px-2">SPECIFICATION</th>
+                <th class="text-center py-2 px-2">QTY</th>
+                <th class="text-center py-2 px-2">UOM</th>
+                <th class="text-center py-2 px-2">SALDO</th>
+                <th class="text-center py-2 px-2">CLEAR</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${(order.Items || []).map((it, idx) => `
+                <tr class="border-b border-surface-50">
+                  <td class="py-2 px-2 text-surface-500">${idx + 1}</td>
+                  <td class="py-2 px-2 font-medium text-surface-800">${it.ItemName}</td>
+                  <td class="py-2 px-2 text-center text-surface-700">${it.Quantity}</td>
+                  <td class="py-2 px-2 text-center text-surface-500">${it.Unit}</td>
+                  <td class="py-2 px-2 text-center text-surface-500">${it.SaldoQty || 0} ${it.SaldoUom || it.Unit || ""}</td>
+                  <td class="py-2 px-2 text-center">${it.Clear ? '<span class="text-green-500 font-bold">&#10003;</span>' : '<span class="text-surface-300">&#10007;</span>'}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -729,12 +735,19 @@ function addItemRow() {
   const row = document.createElement("div");
   row.className = "item-row";
   row.innerHTML = `
-    <input type="text" placeholder="Item name" required class="item-name px-3 py-2.5 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
-    <input type="number" placeholder="Qty" min="1" value="1" required class="item-qty px-3 py-2.5 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
+    <input type="text" placeholder="SPECIFICATION (item name)" required class="item-name px-3 py-2.5 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 flex-1 min-w-[180px]" />
+    <input type="number" placeholder="QTY" min="0" value="1" required class="item-qty px-3 py-2 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 w-20" />
     <select class="item-unit px-3 py-2.5 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400">
       ${CONFIG.UNITS.map((u) => `<option value="${u}">${u}</option>`).join("")}
     </select>
-    <input type="text" placeholder="Notes (optional)" class="item-notes px-3 py-2.5 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
+    <input type="number" placeholder="Saldo QTY" min="0" value="0" class="item-saldo-qty px-3 py-2 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 w-20" />
+    <select class="item-saldo-uom px-3 py-2.5 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400">
+      ${CONFIG.UNITS.map((u) => `<option value="${u}">${u}</option>`).join("")}
+    </select>
+    <label class="flex items-center gap-1 text-xs text-surface-600 shrink-0">
+      <input type="checkbox" class="item-clear w-4 h-4 rounded border-surface-300 text-green-500 focus:ring-green-500/20" />
+      Clear
+    </label>
     <button type="button" onclick="this.parentElement.remove()" class="w-9 h-9 flex items-center justify-center text-surface-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shrink-0">
       <i data-lucide="trash-2" class="w-4 h-4"></i>
     </button>
@@ -752,7 +765,9 @@ function getFormData() {
         itemName: name,
         quantity: parseInt(row.querySelector(".item-qty").value) || 1,
         unit: row.querySelector(".item-unit").value,
-        notes: row.querySelector(".item-notes").value.trim(),
+        saldoQty: parseInt(row.querySelector(".item-saldo-qty").value) || 0,
+        saldoUom: row.querySelector(".item-saldo-uom").value,
+        clear: row.querySelector(".item-clear").checked,
       });
     }
   });
@@ -762,7 +777,6 @@ function getFormData() {
     requesterName: document.getElementById("form-requester").value.trim(),
     department: document.getElementById("form-department").value,
     purpose: document.getElementById("form-purpose").value.trim(),
-    notes: document.getElementById("form-notes").value.trim(),
     items,
   };
 }
@@ -829,7 +843,6 @@ function editOrder(orderId) {
     document.getElementById("form-requester").value = order.RequesterName || "";
     document.getElementById("form-department").value = order.Department || "";
     document.getElementById("form-purpose").value = order.Purpose || "";
-    document.getElementById("form-notes").value = order.Notes || "";
 
     const container = document.getElementById("items-container");
     container.innerHTML = "";
@@ -840,7 +853,9 @@ function editOrder(orderId) {
       lastRow.querySelector(".item-name").value = it.ItemName || "";
       lastRow.querySelector(".item-qty").value = it.Quantity || 1;
       lastRow.querySelector(".item-unit").value = it.Unit || "pcs";
-      lastRow.querySelector(".item-notes").value = it.Notes || "";
+      lastRow.querySelector(".item-saldo-qty").value = it.SaldoQty || 0;
+      lastRow.querySelector(".item-saldo-uom").value = it.SaldoUom || it.Unit || "pcs";
+      lastRow.querySelector(".item-clear").checked = it.Clear || false;
     });
 
     document.getElementById("btn-submit-order").textContent = "Update Order";
@@ -855,7 +870,6 @@ function resetForm() {
   document.getElementById("form-requester").value = "";
   document.getElementById("form-department").value = "";
   document.getElementById("form-purpose").value = "";
-  document.getElementById("form-notes").value = "";
   document.getElementById("items-container").innerHTML = "";
   document.getElementById("items-error").classList.add("hidden");
   document.getElementById("btn-submit-order").textContent = "Create Order";
@@ -908,19 +922,8 @@ function generateExcelFromData(orders) {
     return;
   }
 
-  const rows = orders.map(o => ({
-    "Order ID": o.OrderID,
-    "Date": o.Date,
-    "Requester": o.RequesterName,
-    "Department": o.Department,
-    "Purpose": o.Purpose || "",
-    "Items": o.ItemNames || (o.Items || []).map(it => it.ItemName + " (" + it.Quantity + " " + it.Unit + ")").join(", "),
-    "Status": o.Status,
-    "Notes": o.Notes || ""
-  }));
-
+  const monthNames = ["JANUARY","FEBRUARY","MARCH","APRIL","MAY","JUNE","JULY","AUGUST","SEPTEMBER","OCTOBER","NOVEMBER","DECEMBER"];
   const wb = XLSX.utils.book_new();
-  const headers = ["Order ID", "Date", "Requester", "Department", "Purpose", "Items", "Status", "Notes"];
 
   const thinBorder = {
     top: { style: "thin", color: { rgb: "E2E8F0" } },
@@ -928,109 +931,123 @@ function generateExcelFromData(orders) {
     left: { style: "thin", color: { rgb: "E2E8F0" } },
     right: { style: "thin", color: { rgb: "E2E8F0" } },
   };
-
-  const headerBorder = {
-    top: { style: "thin", color: { rgb: "0F766E" } },
-    bottom: { style: "thin", color: { rgb: "0F766E" } },
-    left: { style: "thin", color: { rgb: "0F766E" } },
-    right: { style: "thin", color: { rgb: "0F766E" } },
+  const greenBorder = {
+    top: { style: "thin", color: { rgb: "0D9488" } },
+    bottom: { style: "thin", color: { rgb: "0D9488" } },
+    left: { style: "thin", color: { rgb: "0D9488" } },
+    right: { style: "thin", color: { rgb: "0D9488" } },
   };
 
-  const statusStyles = {
-    "Pending":     { fg: "FEF3C7", fc: "92400E" },
-    "In Progress": { fg: "DBEAFE", fc: "1E40AF" },
-    "Completed":   { fg: "D1FAE5", fc: "065F46" },
-    "Cancelled":   { fg: "FEE2E2", fc: "991B1B" },
-  };
+  orders.forEach((o) => {
+    const items = o.Items || [];
+    if (items.length === 0) return;
 
-  const ws = XLSX.utils.aoa_to_sheet([headers]);
-  ws["!cols"] = [
-    { wch: 18 }, { wch: 12 }, { wch: 18 }, { wch: 16 },
-    { wch: 22 }, { wch: 40 }, { wch: 12 }, { wch: 22 },
-  ];
+    const sheetName = (o.OrderID || "Order").substring(0, 31).replace(/[\\\/\*\?\[\]]/g, "");
+    const orderDate = new Date(o.Date);
+    const day = orderDate.getDate();
+    const month = monthNames[orderDate.getMonth()];
+    const year = orderDate.getFullYear();
 
-  headers.forEach((_, ci) => {
-    const addr = XLSX.utils.encode_cell({ r: 0, c: ci });
-    ws[addr].s = {
-      fill: { fgColor: { rgb: "0D9488" } },
-      font: { bold: true, color: { rgb: "FFFFFF" }, sz: 10 },
-      alignment: { horizontal: "center" },
-      border: headerBorder,
-    };
-  });
+    const rows = [
+      ["", "", "", "", "", "TAHUN", "", year, "", "", ""],
+      ["", "", "", "", "", "TANGGAL", "", day, month, "", ""],
+      ["=TODAY()", "", "", "", "", "", "", "", "", "", ""],
+      ["NO", "USER", "DEP", "DESCRIPTION", "SPECIFICATION", "ORDER", "", "SALDO", "", "NO. PR", "CLEAR"],
+      ["", "", "", "", "", "QTY", "UOM", "QTY", "UOM", "", ""],
+    ];
 
-  rows.forEach((r, ri) => {
-    const rowNum = ri + 1;
-    const vals = [r["Order ID"], r["Date"], r["Requester"], r["Department"], r["Purpose"], r["Items"], r["Status"], r["Notes"]];
-    vals.forEach((v, ci) => {
-      const addr = XLSX.utils.encode_cell({ r: rowNum, c: ci });
-      ws[addr] = { v: v || "", t: "s" };
+    items.forEach((it, idx) => {
+      rows.push([
+        idx + 1,
+        o.RequesterName || "",
+        o.Department || "",
+        o.Purpose || "",
+        it.ItemName || "",
+        it.Quantity || 0,
+        it.Unit || "PCS",
+        it.SaldoQty || 0,
+        it.SaldoUom || it.Unit || "PCS",
+        o.NoPR || o.OrderID,
+        it.Clear ? "V" : ""
+      ]);
+    });
 
-      const cellStyle = {
-        border: thinBorder,
-        alignment: { wrapText: ci === 5 || ci === 7 },
-      };
+    const ws = XLSX.utils.aoa_to_sheet(rows);
 
-      if (ri % 2 === 0) {
-        cellStyle.fill = { fgColor: { rgb: "F0FDF4" } };
+    ws["!cols"] = [
+      { wch: 5 }, { wch: 18 }, { wch: 12 }, { wch: 28 }, { wch: 35 },
+      { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 16 }, { wch: 8 }
+    ];
+
+    // Merge TAHUN header
+    ws["!merges"] = [
+      { s: { r: 0, c: 5 }, e: { r: 0, c: 6 } },
+      { s: { r: 1, c: 5 }, e: { r: 1, c: 6 } },
+      { s: { r: 3, c: 5 }, e: { r: 3, c: 6 } },
+      { s: { r: 3, c: 7 }, e: { r: 3, c: 8 } },
+    ];
+
+    // Style header rows (green)
+    for (let c = 0; c < 11; c++) {
+      // Row 1-2: TAHUN/TANGGAL labels
+      [0, 1].forEach(r => {
+        const addr = XLSX.utils.encode_cell({ r, c });
+        if (ws[addr]) {
+          ws[addr].s = {
+            fill: { fgColor: { rgb: "0D9488" } },
+            font: { bold: true, color: { rgb: "FFFFFF" }, sz: 10 },
+            alignment: { horizontal: "center" },
+            border: greenBorder,
+          };
+        }
+      });
+      // Row 4: Column headers
+      const addr4 = XLSX.utils.encode_cell({ r: 3, c });
+      if (ws[addr4]) {
+        ws[addr4].s = {
+          fill: { fgColor: { rgb: "0D9488" } },
+          font: { bold: true, color: { rgb: "FFFFFF" }, sz: 10 },
+          alignment: { horizontal: "center" },
+          border: greenBorder,
+        };
       }
+      // Row 5: Sub-headers (QTY, UOM)
+      const addr5 = XLSX.utils.encode_cell({ r: 4, c });
+      if (ws[addr5]) {
+        ws[addr5].s = {
+          fill: { fgColor: { rgb: "0D9488" } },
+          font: { bold: true, color: { rgb: "FFFFFF" }, sz: 9 },
+          alignment: { horizontal: "center" },
+          border: greenBorder,
+        };
+      }
+    }
 
-      if (ci === 6) {
-        const sc = statusStyles[v];
-        if (sc) {
-          cellStyle.fill = { fgColor: { rgb: sc.fg } };
-          cellStyle.font = { color: { rgb: sc.fc }, bold: true, sz: 10 };
+    // Style data rows
+    items.forEach((it, idx) => {
+      const r = idx + 5;
+      for (let c = 0; c < 11; c++) {
+        const addr = XLSX.utils.encode_cell({ r, c });
+        if (ws[addr]) {
+          const cellStyle = {
+            border: thinBorder,
+            alignment: { horizontal: c === 0 || c === 5 || c === 6 || c === 7 || c === 8 || c === 10 ? "center" : "left" },
+          };
+          if (idx % 2 === 0) {
+            cellStyle.fill = { fgColor: { rgb: "F0FDF4" } };
+          }
+          // Clear column green highlight
+          if (c === 10 && it.Clear) {
+            cellStyle.fill = { fgColor: { rgb: "D1FAE5" } };
+            cellStyle.font = { bold: true, color: { rgb: "065F46" } };
+          }
+          ws[addr].s = cellStyle;
         }
       }
-
-      ws[addr].s = cellStyle;
     });
+
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
   });
-
-  ws["!ref"] = XLSX.utils.encode_range({ s: { c: 0, r: 0 }, e: { c: 7, r: rows.length } });
-  XLSX.utils.book_append_sheet(wb, ws, "Work Orders");
-
-  // Summary sheet
-  const statusCounts = {};
-  const deptCounts = {};
-  rows.forEach((r) => {
-    statusCounts[r.Status] = (statusCounts[r.Status] || 0) + 1;
-    deptCounts[r.Department] = (deptCounts[r.Department] || 0) + 1;
-  });
-
-  const summaryData = [
-    ["Metric", "Value"],
-    ["Total Orders", rows.length],
-    ["Pending", statusCounts["Pending"] || 0],
-    ["In Progress", statusCounts["In Progress"] || 0],
-    ["Completed", statusCounts["Completed"] || 0],
-    ["Cancelled", statusCounts["Cancelled"] || 0],
-    ["", ""],
-    ["Department Breakdown", ""],
-  ];
-  Object.keys(deptCounts).sort().forEach((dept) => {
-    summaryData.push([dept, deptCounts[dept]]);
-  });
-
-  const ws2 = XLSX.utils.aoa_to_sheet(summaryData);
-  ws2["!cols"] = [{ wch: 22 }, { wch: 12 }];
-
-  ["A1", "B1"].forEach((addr) => {
-    if (ws2[addr]) ws2[addr].s = {
-      fill: { fgColor: { rgb: "0D9488" } },
-      font: { bold: true, color: { rgb: "FFFFFF" }, sz: 10 },
-      border: headerBorder,
-    };
-  });
-
-  for (let ri = 1; ri < summaryData.length; ri++) {
-    for (let ci = 0; ci < 2; ci++) {
-      const addr = XLSX.utils.encode_cell({ r: ri, c: ci });
-      if (ws2[addr]) ws2[addr].s = { border: thinBorder };
-    }
-  }
-
-  XLSX.utils.book_append_sheet(wb, ws2, "Summary");
 
   const filename = "Work_Orders_" + new Date().toISOString().slice(0, 10).replace(/-/g, "");
   XLSX.writeFile(wb, filename + ".xlsx");
@@ -1087,23 +1104,23 @@ function exportWorkOrderPDF() {
       </div>
       <div class="grid">
         <div><div class="label">Order Date</div><div class="value">${formatDate(o.Date)}</div></div>
-        <div><div class="label">Requester</div><div class="value">${o.RequesterName}</div></div>
-        <div><div class="label">Department</div><div class="value">${o.Department}</div></div>
-        <div><div class="label">Purpose</div><div class="value">${o.Purpose || "-"}</div></div>
+        <div><div class="label">NO. PR</div><div class="value">${o.NoPR || o.OrderID}</div></div>
+        <div><div class="label">USER</div><div class="value">${o.RequesterName}</div></div>
+        <div><div class="label">DEP</div><div class="value">${o.Department}</div></div>
+        <div><div class="label">DESCRIPTION</div><div class="value">${o.Purpose || "-"}</div></div>
       </div>
       <table>
-        <thead><tr><th>#</th><th>Item</th><th>Qty</th><th>Unit</th><th>Notes</th></tr></thead>
+        <thead><tr><th>#</th><th>SPECIFICATION</th><th>QTY</th><th>UOM</th><th>SALDO</th><th>CLEAR</th></tr></thead>
         <tbody>
           ${(o.Items || [])
             .map(
               (it, i) => `
-            <tr><td>${i + 1}</td><td>${it.ItemName}</td><td>${it.Quantity}</td><td>${it.Unit}</td><td>${it.Notes || ""}</td></tr>
+            <tr><td>${i + 1}</td><td>${it.ItemName}</td><td>${it.Quantity}</td><td>${it.Unit}</td><td>${it.SaldoQty || 0} ${it.SaldoUom || ""}</td><td>${it.Clear ? "V" : ""}</td></tr>
           `,
             )
             .join("")}
         </tbody>
       </table>
-      ${o.Notes ? `<div class="notes"><strong>Notes:</strong> ${o.Notes}</div>` : ""}
       <div class="footer">Generated ${new Date().toLocaleDateString("id-ID")} &middot; Order Management System</div>
     </body></html>
   `);

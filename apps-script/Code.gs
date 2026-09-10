@@ -1,12 +1,17 @@
 // ========================================
 // Work Order Management System - Backend
-// Google Apps Script (Flat Rows - No JSON)
+// Google Apps Script (13 Columns - Excel Format)
 // ========================================
 
 const SHEET_ORDERS = "ORDERS";
 const SHEET_ITEMS = "ORDER_ITEMS";
 const CACHE_TTL = 180;
-const COL_COUNT = 11;
+const COL_COUNT = 13;
+
+const HEADERS = [
+  "OrderID", "Date", "RequesterName", "Department", "Purpose", "Status",
+  "ItemName", "Quantity", "Unit", "SaldoQty", "SaldoUom", "NoPR", "Clear"
+];
 
 function doGet(e) {
   const action = (e && e.parameter) ? e.parameter.action : "getDashboardStats";
@@ -33,8 +38,7 @@ function doGet(e) {
 }
 
 // ========================================
-// Sheet: OrderID | Date | RequesterName | Department | Purpose | Notes | Status | ItemName | Quantity | Unit | ItemNotes
-// Each item = 1 row. Order data repeated.
+// Sheet Helpers
 // ========================================
 
 function getSheet(name) {
@@ -43,7 +47,7 @@ function getSheet(name) {
   if (!sheet) {
     sheet = ss.insertSheet(name);
     if (name === SHEET_ORDERS) {
-      sheet.appendRow(["OrderID", "Date", "RequesterName", "Department", "Purpose", "Notes", "Status", "ItemName", "Quantity", "Unit", "ItemNotes"]);
+      sheet.appendRow(HEADERS);
     }
   }
   return sheet;
@@ -86,7 +90,6 @@ function readOrders() {
     if (!oid) continue;
 
     if (!orderMap[oid]) {
-      // Format date properly
       let dateVal = r[1];
       if (dateVal instanceof Date) {
         dateVal = Utilities.formatDate(dateVal, "Asia/Jakarta", "yyyy-MM-dd");
@@ -100,20 +103,21 @@ function readOrders() {
         RequesterName: String(r[2] || ""),
         Department: String(r[3] || ""),
         Purpose: String(r[4] || ""),
-        Notes: String(r[5] || ""),
-        Status: String(r[6] || "Pending"),
+        Status: String(r[5] || "Pending"),
         Items: []
       };
       orderKeys.push(oid);
     }
 
-    const itemName = String(r[7] || "").trim();
+    const itemName = String(r[6] || "").trim();
     if (itemName) {
       orderMap[oid].Items.push({
         ItemName: itemName,
-        Quantity: parseInt(r[8]) || 0,
-        Unit: String(r[9] || "pcs"),
-        Notes: String(r[10] || "")
+        Quantity: parseInt(r[7]) || 0,
+        Unit: String(r[8] || "pcs"),
+        SaldoQty: parseInt(r[9]) || 0,
+        SaldoUom: String(r[10] || "pcs"),
+        Clear: String(r[12] || "") === "TRUE" || String(r[12] || "") === "1"
       });
     }
   }
@@ -121,11 +125,9 @@ function readOrders() {
   return orderKeys.map(oid => {
     const o = orderMap[oid];
     o.ItemCount = o.Items.length;
-    o.ItemNames = o.Items.map(it => {
-      let s = it.ItemName + " (" + it.Quantity + " " + it.Unit + ")";
-      if (it.Notes) s += " - " + it.Notes;
-      return s;
-    }).join(", ");
+    o.ItemNames = o.Items.map(it => it.ItemName + " (" + it.Quantity + " " + it.Unit + ")").join(", ");
+    o.NoPR = oid;
+    o.Clear = o.Items.every(it => it.Clear);
     return o;
   });
 }
@@ -139,19 +141,17 @@ function migrateData() {
   let ordersSheet = ss.getSheetByName(SHEET_ORDERS);
   const itemsSheet = ss.getSheetByName(SHEET_ITEMS);
 
-  // If no ORDERS sheet, create fresh with correct headers
   if (!ordersSheet) {
     ordersSheet = ss.insertSheet(SHEET_ORDERS);
-    ordersSheet.appendRow(["OrderID", "Date", "RequesterName", "Department", "Purpose", "Notes", "Status", "ItemName", "Quantity", "Unit", "ItemNotes"]);
+    ordersSheet.appendRow(HEADERS);
     if (itemsSheet) { try { ss.deleteSheet(itemsSheet); } catch(e) {} }
-    return { success: true, message: "Sheet ORDERS baru dibuat dengan 11 kolom" };
+    return { success: true, message: "Sheet ORDERS baru dibuat dengan 13 kolom" };
   }
 
   const lastRow = ordersSheet.getLastRow();
   if (lastRow < 2) {
-    // Empty sheet, just set headers
     ordersSheet.clearContents();
-    ordersSheet.appendRow(["OrderID", "Date", "RequesterName", "Department", "Purpose", "Notes", "Status", "ItemName", "Quantity", "Unit", "ItemNotes"]);
+    ordersSheet.appendRow(HEADERS);
     if (itemsSheet) { try { ss.deleteSheet(itemsSheet); } catch(e) {} }
     return { success: true, message: "Sheet ORDERS kosong, header sudah di-set" };
   }
@@ -159,23 +159,13 @@ function migrateData() {
   const numCols = ordersSheet.getLastColumn();
   const headers = ordersSheet.getRange(1, 1, 1, numCols).getValues()[0];
 
-  // Already flat rows?
-  if (headers.includes("ItemName") && headers.includes("ItemNotes")) {
+  // Check if already migrated to 13 cols
+  if (headers.includes("SaldoQty") && headers.includes("Clear") && headers.includes("NoPR")) {
     if (itemsSheet) { try { ss.deleteSheet(itemsSheet); } catch(e) {} }
-    return { success: true, message: "Sudah di-migrate (flat rows)" };
+    return { success: true, message: "Sudah di-migrate (13 kolom)" };
   }
 
-  // Read all data
-  if (lastRow < 2) return { success: false, message: "Tidak ada data" };
-
-  const allData = ordersSheet.getRange(1, 1, lastRow, numCols).getValues();
-  const oldHeaders = allData[0];
-
-  // Find column indices
-  const colIdx = {};
-  oldHeaders.forEach((h, i) => { colIdx[h] = i; });
-
-  // Read items from old ORDER_ITEMS sheet
+  // Read items from old sheet
   const itemData = {};
   if (itemsSheet && itemsSheet.getLastRow() > 1) {
     const iRows = itemsSheet.getDataRange().getValues();
@@ -192,21 +182,25 @@ function migrateData() {
     }
   }
 
-  // Build flat rows
+  // Read old data
+  const allData = ordersSheet.getRange(1, 1, lastRow, numCols).getValues();
+  const oldHeaders = allData[0];
+  const colIdx = {};
+  oldHeaders.forEach((h, i) => { colIdx[h] = i; });
+
+  // Build new 13-col rows
   const newRows = [];
   for (let i = 1; i < allData.length; i++) {
     const r = allData[i];
     const oid = String(r[colIdx["OrderID"] || 0] || "").trim();
     if (!oid) continue;
 
-    const date = r[colIdx["Date"] || 1] || "";
-    const requester = String(r[colIdx["RequesterName"] || 2] || "");
-    const dept = String(r[colIdx["Department"] || 3] || "");
-    const purpose = String(r[colIdx["Purpose"] || 4] || "");
-    const notes = String(r[colIdx["Notes"] || 5] || "");
-    const status = String(r[colIdx["Status"] || 6] || "Pending");
+    let dateVal = r[colIdx["Date"] || 1] || "";
+    if (dateVal instanceof Date) {
+      dateVal = Utilities.formatDate(dateVal, "Asia/Jakarta", "yyyy-MM-dd");
+    }
 
-    // Check if Items column has JSON
+    // Check if items already in JSON
     let items = [];
     const itemsCol = colIdx["Items"];
     if (itemsCol !== undefined && r[itemsCol]) {
@@ -215,40 +209,41 @@ function migrateData() {
         if (Array.isArray(parsed)) items = parsed;
       } catch(e) {}
     }
-
-    // Fallback to ORDER_ITEMS sheet data
     if (items.length === 0 && itemData[oid]) {
       items = itemData[oid];
     }
-
-    // If still no items, create one empty row
     if (items.length === 0) {
-      items = [{ ItemName: "", Quantity: 0, Unit: "pcs", Notes: "" }];
+      items = [{ ItemName: "", Quantity: 0, Unit: "pcs", SaldoQty: 0, SaldoUom: "pcs", Clear: false }];
     }
 
-    // Write one row per item
     for (const it of items) {
       newRows.push([
-        oid, date, requester, dept, purpose, notes, status,
+        oid,
+        dateVal,
+        String(r[colIdx["RequesterName"] || 2] || ""),
+        String(r[colIdx["Department"] || 3] || ""),
+        String(r[colIdx["Purpose"] || 4] || ""),
+        String(r[colIdx["Status"] || 6] || "Pending"),
         it.ItemName || it.itemName || "",
         parseInt(it.Quantity || it.quantity) || 0,
         it.Unit || it.unit || "pcs",
-        it.Notes || it.notes || ""
+        parseInt(it.SaldoQty || it.saldoQty) || 0,
+        it.SaldoUom || it.saldoUom || "pcs",
+        oid,
+        it.Clear || false
       ]);
     }
   }
 
-  // Rewrite sheet
   ordersSheet.clearContents();
-  ordersSheet.getRange(1, 1, 1, COL_COUNT).setValues([["OrderID", "Date", "RequesterName", "Department", "Purpose", "Notes", "Status", "ItemName", "Quantity", "Unit", "ItemNotes"]]);
+  ordersSheet.getRange(1, 1, 1, COL_COUNT).setValues([HEADERS]);
   if (newRows.length > 0) {
     ordersSheet.getRange(2, 1, newRows.length, COL_COUNT).setValues(newRows);
   }
 
-  // Delete old sheet
   if (itemsSheet) { try { ss.deleteSheet(itemsSheet); } catch(e) {} }
   CacheService.getScriptCache().remove("dashboard_stats");
-  return { success: true, message: "Berhasil migrate " + newRows.length + " baris (flat)" };
+  return { success: true, message: "Berhasil migrate " + newRows.length + " baris (13 kolom)" };
 }
 
 // ========================================
@@ -338,7 +333,7 @@ function getDepartments() {
 }
 
 function createOrder(body) {
-  const { date, requesterName, department, purpose, notes, items } = body;
+  const { date, requesterName, department, purpose, items } = body;
   if (!requesterName || !department || !items || items.length === 0) {
     return { success: false, message: "Missing required fields" };
   }
@@ -349,11 +344,14 @@ function createOrder(body) {
 
   const rows = items.map(it => [
     orderId, orderDate, requesterName, department,
-    purpose || "", notes || "", "Pending",
+    purpose || "", "Pending",
     it.itemName || "",
     parseInt(it.quantity) || 0,
     it.unit || "pcs",
-    it.notes || ""
+    parseInt(it.saldoQty) || 0,
+    it.saldoUom || "pcs",
+    orderId,
+    it.clear || false
   ]);
 
   if (rows.length > 0) {
@@ -365,7 +363,7 @@ function createOrder(body) {
 }
 
 function updateOrder(body) {
-  const { orderId, date, requesterName, department, purpose, notes, items } = body;
+  const { orderId, date, requesterName, department, purpose, items } = body;
   if (!orderId) return { success: false, message: "Order ID is required" };
 
   const sheet = getSheet(SHEET_ORDERS);
@@ -381,16 +379,21 @@ function updateOrder(body) {
     sheet.deleteRow(startRow[i]);
   }
 
+  // Get current status from first deleted row
+  const oldStatus = data[startRow[0] - 1][5] || "Pending";
+
   // Insert new rows
   const orderDate = date || data[startRow[0] - 1][1];
-  const rows = (items && items.length > 0 ? items : [{ itemName: "", quantity: 0, unit: "pcs", notes: "" }]).map(it => [
+  const rows = (items && items.length > 0 ? items : [{ itemName: "", quantity: 0, unit: "pcs", saldoQty: 0, saldoUom: "pcs", clear: false }]).map(it => [
     orderId, orderDate, requesterName || "",
-    department || "", purpose || "", notes || "",
-    data[startRow[0] - 1][6] || "Pending",
+    department || "", purpose || "", oldStatus,
     it.itemName || "",
     parseInt(it.quantity) || 0,
     it.unit || "pcs",
-    it.notes || ""
+    parseInt(it.saldoQty) || 0,
+    it.saldoUom || "pcs",
+    orderId,
+    it.clear || false
   ]);
 
   const insertIdx = startRow[0];
@@ -410,7 +413,7 @@ function updateOrderStatus(body) {
   const data = sheet.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] === orderId) {
-      sheet.getRange(i + 1, 7).setValue(status);
+      sheet.getRange(i + 1, 6).setValue(status);
     }
   }
   CacheService.getScriptCache().remove("dashboard_stats");
@@ -433,7 +436,7 @@ function deleteOrder(orderId) {
 }
 
 // ========================================
-// Excel Export
+// Excel Export (Backend - raw data)
 // ========================================
 
 function exportExcel(params) {
@@ -455,57 +458,65 @@ function exportExcel(params) {
 
   return {
     success: true,
-    data: orders.map(o => ({
-      "Order ID": o.OrderID, "Date": o.Date, "Requester": o.RequesterName,
-      "Department": o.Department, "Purpose": o.Purpose || "",
-      "Items": o.ItemNames, "Status": o.Status, "Notes": o.Notes || ""
-    })),
+    data: orders,
     total: orders.length,
     filename: "Work_Orders_" + Utilities.formatDate(new Date(), "Asia/Jakarta", "yyyyMMdd_HHmmss")
   };
 }
 
 // ========================================
-// Sample Data Generator (run once)
+// Sample Data Generator
 // ========================================
 
 function generateSampleData() {
   const sheet = getSheet(SHEET_ORDERS);
   const lastRow = sheet.getLastRow();
-  if (lastRow > 1) return { success: false, message: "Sheet sudah ada data. Hapus dulu atau migrate dulu." };
+  if (lastRow > 1) return { success: false, message: "Sheet sudah ada data. Hapus dulu." };
 
-  const names = ["Budi Santoso", "Andi Pratama", "Dewi Lestari", "Rizki Ramadhan", "Siti Nurhaliza", "Ahmad Fauzi", "Maya Putri", "Doni Kurniawan", "Rina Wati", "Hendra Wijaya", "Lisa Anggraeni", "Fajar Nugroho", "Anisa Rahmawati", "Tommy Prasetyo", "Sari Dewi", "Bayu Firmansyah", "Nina Agustin", "Rudi Hermawan", "Lia Marlina", "Yoga Saputra"];
+  const names = ["ROCHIM", "HERY", "GALIH", "EDO", "EDI", "MANSUR", "RAFLI", "BUDI", "ANDI", "DEWI", "RIZKI", "SITI", "AHMAD", "MAYA", "DONI", "RINA", "HENDRA", "LISA", "FAJAR", "ANISA"];
   const depts = ["Engineering", "Project Management", "Procurement", "Operations", "Finance", "HR & Admin", "IT", "Marketing", "Logistics", "Other"];
   const statuses = ["Pending", "In Progress", "Completed", "Cancelled"];
-  const statusWeights = [20, 15, 50, 15];
-  const purposes = ["Project Alpha", "Maintenance Q3", "Office Renovation", "Server Upgrade", "Event Preparation", "Inventory Restock", "Safety Equipment", "Lab Supplies", "Field Work", "Client Delivery"];
+  const descriptions = [
+    "U/STOCK BULANAN", "U/REBUILD HONNING", "U/INTALASI MESIN POMPA", "U/TOOL KITS",
+    "U/PERLENGKAPAN SAFETY", "U/STOCK", "U/REPLACE KAPASITOR", "U/MAINTENANCE",
+    "U/PROJECT BARU", "U/RENOVASI"
+  ];
   const itemPool = [
-    { name: "RAM DDR4 8GB", unit: "pcs", notes: ["Merk Samsung", "Merk Kingston", "Merk Corsair", ""] },
-    { name: "Kabel NYM 2x2.5", unit: "meter", notes: ["Standar SNI", "Anti api", ""] },
-    { name: "Monitor LG 24 inch", unit: "unit", notes: ["Model 24MK430", "Full HD", ""] },
-    { name: "Keyboard Mechanical", unit: "pcs", notes: ["Switch Blue", "RGB", ""] },
-    { name: "Mouse Wireless", unit: "pcs", notes: ["Logitech", "Ergonomis", ""] },
-    { name: "Printer Tinta Canon", unit: "pack", notes: ["Warna hitam", "Warna color", ""] },
-    { name: "Baterai AA", unit: "pack", notes: ["Energizer", "Alkaline", ""] },
-    { name: "Tinta Printer Epson", unit: "botol", notes: ["Black", "Color set", ""] },
-    { name: "Amplas 120", unit: "pack", notes: ["Ukuran A4", ""] },
-    { name: "Baut M8", unit: "pack", notes: ["Panjang 3cm", "Stainless", ""] },
-    { name: "Cat Tembok", unit: "kaleng", notes: ["Putih 5kg", "Abu-abu 5kg", "Biru 2.5kg", ""] },
-    { name: "Pipa PVC 2 inch", unit: "batang", notes: ["Standar", ""] },
-    { name: "Sepatu Safety", unit: "pcs", notes: ["SNI", "Ukuran 42", "Ukuran 40", ""] },
-    { name: "Helm Proyek", unit: "pcs", notes: ["Kuning", "Putih", "Biru", ""] },
-    { name: "Sarung Tangan", unit: "pcs", notes: ["Karet", "Kain", ""] },
-    { name: "Lem Aica Aibon", unit: "pack", notes: ["Ukuran 100g", ""] },
-    { name: "Suku Cadang AC", unit: "set", notes: ["Filter", "Compressor", ""] },
-    { name: "Software License", unit: "set", notes: ["Windows 11 Pro", "Office 365", "AutoCAD", ""] },
-    { name: "USB Drive 32GB", unit: "pcs", notes: ["SanDisk", "Kingston", ""] },
-    { name: "Headset Gaming", unit: "pcs", notes: ["Noise cancelling", ""] }
+    { name: "ALUMUNIUM FOIL", unit: "PCS" },
+    { name: "BATU GERINDA 4\" (CUTTING TEBAL)", unit: "PCS" },
+    { name: "BATU GERINDA 4\" (CUTTING TIPIS)", unit: "PCS" },
+    { name: "BUFFING BATU PAYUNG KECIL", unit: "PCS" },
+    { name: "BUFFING GRIT 240 (50 X 10)", unit: "PCS" },
+    { name: "BUFFING GRIT 320 (50 X 20)", unit: "PCS" },
+    { name: "CLEANER/REMOVER SKC-S", unit: "PCS" },
+    { name: "CONTACT TIP 1,2MM", unit: "PCS" },
+    { name: "GAS CUTTING TIP 106HC-3 KOIKE", unit: "PCS" },
+    { name: "ISOLASI LISTRIK", unit: "PCS" },
+    { name: "KACA LAS 10 HITAM", unit: "PCS" },
+    { name: "KUAS 2\"", unit: "PCS" },
+    { name: "LAKBAN HITAM 35 MM X 12 M", unit: "PCS" },
+    { name: "LEM ALTECO", unit: "PCS" },
+    { name: "NUT M16", unit: "PCS" },
+    { name: "NUT M20 (HITAM)", unit: "PCS" },
+    { name: "SARUNG TANGAN KARET", unit: "PCS" },
+    { name: "SEAL TAPE", unit: "PCS" },
+    { name: "SIKAT KAWAT", unit: "PCS" },
+    { name: "INSERT CNMG120408 IC8250", unit: "PCS" },
+    { name: "INSERT GROOVING MGMN400-M", unit: "PCS" },
+    { name: "KAWAT LAS CHE 40 6013 2,6 MM", unit: "BOX" },
+    { name: "KAWAT LAS CHE 56 7016 3.2 MM", unit: "BOX" },
+    { name: "BEARING 6205", unit: "PCS" },
+    { name: "BEARING 6203", unit: "PCS" },
+    { name: "KABEL 2 X 1,5 MM", unit: "M" },
+    { name: "TANG BUAYA 10 INC", unit: "PCS" },
+    { name: "KACA MATA SAFETY BENING", unit: "PCS" },
+    { name: "AR HP", unit: "TBG" },
+    { name: "CO2", unit: "TBG" }
   ];
 
   const rows = [];
   let orderNum = 0;
 
-  // Generate orders across 6 months (Apr - Sep 2026)
   for (let month = 3; month <= 8; month++) {
     const ordersPerMonth = 30 + Math.floor(Math.random() * 15);
     for (let j = 0; j < ordersPerMonth; j++) {
@@ -517,29 +528,31 @@ function generateSampleData() {
 
       const name = names[Math.floor(Math.random() * names.length)];
       const dept = depts[Math.floor(Math.random() * depts.length)];
-      const purpose = purposes[Math.floor(Math.random() * purposes.length)];
+      const desc = descriptions[Math.floor(Math.random() * descriptions.length)];
 
-      // Weighted status
       let statusRand = Math.random() * 100;
       let status = "Completed";
-      if (statusRand < statusWeights[0]) status = "Pending";
-      else if (statusRand < statusWeights[0] + statusWeights[1]) status = "In Progress";
-      else if (statusRand < statusWeights[0] + statusWeights[1] + statusWeights[2]) status = "Completed";
+      if (statusRand < 20) status = "Pending";
+      else if (statusRand < 35) status = "In Progress";
+      else if (statusRand < 85) status = "Completed";
       else status = "Cancelled";
 
-      const itemCount = 1 + Math.floor(Math.random() * 3);
+      const itemCount = 1 + Math.floor(Math.random() * 4);
       const usedItems = new Set();
       for (let k = 0; k < itemCount; k++) {
         let itemIdx;
         do { itemIdx = Math.floor(Math.random() * itemPool.length); } while (usedItems.has(itemIdx) && usedItems.size < itemPool.length);
         usedItems.add(itemIdx);
         const item = itemPool[itemIdx];
-        const qty = 1 + Math.floor(Math.random() * 20);
-        const note = item.notes[Math.floor(Math.random() * item.notes.length)];
+        const qty = 1 + Math.floor(Math.random() * 50);
+        const saldoQty = Math.floor(Math.random() * 10);
+        const clear = Math.random() > 0.7;
 
         rows.push([
-          orderId, dateStr, name, dept, purpose, "", status,
-          item.name, qty, item.unit, note
+          orderId, dateStr, name, dept, desc, status,
+          item.name, qty, item.unit,
+          saldoQty, item.unit,
+          orderId, clear
         ]);
       }
     }

@@ -1068,6 +1068,7 @@ async function generateExcelFromData(orders) {
       },
     });
     ws.columns = WIDTHS.map((w) => ({ width: w }));
+    ws.views = [{ showGridLines: false }];
 
     const parsed = order.Date || order.date ? new Date(order.Date || order.date) : new Date();
     const valid = isNaN(parsed.getTime()) ? new Date() : parsed;
@@ -1109,6 +1110,7 @@ async function generateExcelFromData(orders) {
     const row3 = ws.getRow(3);
     row3.height = 21;
     fillWhite(row3, 11);
+    ws.mergeCells("G3:H3");
     row3.getCell(7).value = "TAHUN";
     row3.getCell(7).font = { name: "Calibri", size: 10, color: { argb: "FF000000" } };
     row3.getCell(7).alignment = { horizontal: "right", vertical: "middle" };
@@ -1296,6 +1298,13 @@ function exportWorkOrderPDF() {
   if (!currentOrder) return;
   const o = currentOrder;
 
+  const base = location.href.substring(0, location.href.lastIndexOf("/") + 1);
+  const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const dayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  const parsed = o.Date ? new Date(o.Date) : new Date();
+  const d = isNaN(parsed.getTime()) ? new Date() : parsed;
+  const docDate = `${dayNames[d.getDay()]}, ${String(d.getDate()).padStart(2, "0")} ${months[d.getMonth()]} ${d.getFullYear()}`;
+
   const printWindow = window.open("", "_blank");
   printWindow.document.write(`
     <!DOCTYPE html>
@@ -1304,55 +1313,62 @@ function exportWorkOrderPDF() {
       <title>Order ${o.OrderID}</title>
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: Arial, sans-serif; padding: 40px; color: #333; }
-        .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0d9488; padding-bottom: 16px; margin-bottom: 24px; }
-        .title { font-size: 20px; font-weight: bold; color: #115e59; }
-        .subtitle { font-size: 12px; color: #64748b; margin-top: 4px; }
-        .badge { display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 11px; font-weight: 600; }
-        .badge-pending { background: #fef3c7; color: #92400e; }
-        .badge-in-progress { background: #dbeafe; color: #1e40af; }
-        .badge-completed { background: #d1fae5; color: #065f46; }
-        .badge-cancelled { background: #fee2e2; color: #991b1b; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
-        .label { font-size: 10px; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.05em; margin-bottom: 4px; }
-        .value { font-size: 13px; }
+        @page { size: A4 landscape; margin: 10mm; }
+        body { font-family: Calibri, Arial, sans-serif; padding: 24px; color: #000; background: #fff; font-size: 10pt; }
+        .top { display: flex; justify-content: space-between; align-items: flex-start; }
+        .logo img { width: 228px; height: 40px; object-fit: contain; }
+        .info { text-align: right; font-size: 10pt; }
+        .info .lbl { display: inline-block; width: 70px; text-align: right; margin-right: 8px; }
+        .info .val { display: inline-block; min-width: 110px; text-align: center; font-weight: bold; border: 1px solid #000; padding: 1px 8px; }
+        .title { text-align: center; font-size: 14pt; font-weight: bold; margin: 12px 0 4px; }
+        .docdate { font-size: 10pt; border-bottom: 2px solid #000; padding-bottom: 4px; margin-bottom: 12px; }
         table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
-        th { background: #0d9488; color: white; padding: 10px 12px; font-size: 11px; text-align: left; }
-        td { padding: 10px 12px; font-size: 12px; border-bottom: 1px solid #e2e8f0; }
-        tr:nth-child(even) td { background: #f8fafc; }
-        .notes { font-size: 12px; color: #475569; background: #f8fafc; padding: 12px; border-radius: 8px; }
-        .footer { margin-top: 32px; border-top: 1px solid #e2e8f0; padding-top: 16px; font-size: 10px; color: #94a3b8; text-align: center; }
-        @media print { body { padding: 20px; } }
+        th, td { border: 1px solid #000; padding: 4px 6px; font-size: 9.5pt; vertical-align: middle; }
+        th { text-align: center; font-weight: bold; }
+        td.c { text-align: center; }
+        .sig { display: flex; justify-content: space-between; margin-top: 28px; page-break-inside: avoid; }
+        .sig-box { width: 30%; text-align: center; font-size: 10pt; }
+        .sig-box .space { height: 70px; }
+        .sig-box .name { border-top: 1px solid #000; display: inline-block; min-width: 160px; padding-top: 2px; }
+        .footer { margin-top: 24px; font-size: 8pt; color: #555; text-align: center; }
+        @media print { body { padding: 0; } }
       </style>
     </head>
     <body>
-      <div class="header">
-        <div>
-          <div class="title">Order</div>
-          <div class="subtitle">PT. RRA — Order Management System</div>
-        </div>
-        <div style="text-align:right">
-          <div class="badge badge-${statusClass(o.Status)}">${o.Status}</div>
-          <div class="subtitle" style="margin-top:8px">${o.OrderID}</div>
+      <div class="top">
+        <div class="logo"><img src="${base}logorra.png" alt="RRA" /></div>
+        <div class="info">
+          <div><span class="lbl">TAHUN</span><span class="val">${d.getFullYear()}</span></div>
+          <div style="margin-top:4px"><span class="lbl">TANGGAL</span><span class="val">${d.getDate()} ${months[d.getMonth()].toUpperCase()}</span></div>
         </div>
       </div>
-      <div class="grid">
-        <div><div class="label">Order Date</div><div class="value">${formatDate(o.Date)}</div></div>
-        <div><div class="label">NO. PR</div><div class="value">${o.NoPR || o.OrderID}</div></div>
-        <div><div class="label">DEP</div><div class="value">${o.Department}</div></div>
-      </div>
+      <div class="title">REKAP FORM REQUISITION</div>
+      <div class="docdate">${docDate}</div>
       <table>
-        <thead><tr><th>#</th><th>USER</th><th>DESCRIPTION</th><th>SPECIFICATION</th><th>QTY</th><th>UOM</th><th>SALDO</th><th>CLEAR</th></tr></thead>
+        <thead>
+          <tr>
+            <th rowspan="2">NO</th><th rowspan="2">USER</th><th rowspan="2">DEP</th>
+            <th rowspan="2">DESCRIPTION</th><th rowspan="2">SPECIFICATION</th>
+            <th colspan="2">ORDER</th><th colspan="2">SALDO</th>
+            <th rowspan="2">NO. PR</th><th rowspan="2">CLEAR</th>
+          </tr>
+          <tr><th>QTY</th><th>UOM</th><th>QTY</th><th>UOM</th></tr>
+        </thead>
         <tbody>
           ${(o.Items || [])
             .map(
               (it, i) => `
-            <tr><td>${i + 1}</td><td>${it.User || ""}</td><td>${it.Description || ""}</td><td>${it.ItemName}</td><td>${it.Quantity}</td><td>${it.Unit}</td><td>${it.SaldoQty || 0} ${it.SaldoUom || ""}</td><td>${it.Clear ? "V" : ""}</td></tr>
+            <tr><td class="c">${i + 1}</td><td>${it.User || ""}</td><td>${o.Department || ""}</td><td>${it.Description || ""}</td><td>${it.ItemName}</td><td class="c">${it.Quantity}</td><td class="c">${it.Unit}</td><td class="c">${it.SaldoQty || 0}</td><td class="c">${it.SaldoUom || it.Unit || ""}</td><td class="c">${o.NoPR || o.OrderID}</td><td class="c">${it.Clear || it.clear ? "V" : ""}</td></tr>
           `,
             )
             .join("")}
         </tbody>
       </table>
+      <div class="sig">
+        <div class="sig-box"><div>Dibuat Oleh,</div><div class="space"></div><div class="name">( .................... )</div></div>
+        <div class="sig-box"><div>Diperiksa,</div><div class="space"></div><div class="name">( .................... )</div></div>
+        <div class="sig-box"><div>Disetujui,</div><div class="space"></div><div class="name">( .................... )</div></div>
+      </div>
       <div class="footer">Generated ${new Date().toLocaleDateString("id-ID")} &middot; Order Management System</div>
     </body></html>
   `);

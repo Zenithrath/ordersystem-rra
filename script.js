@@ -1261,7 +1261,12 @@ async function generateExcelFromData(orders) {
   // EXPORT
   // =========================================================
 
-  const filename = `REKAP_FORM_REQUISITION_${new Date().getFullYear()}.xlsx`;
+  const cleanId = (v) => String(v || "").replace(/[\\\/:*?"<>|]/g, "").trim();
+  const firstId = cleanId(orders[0] && (orders[0].OrderID || orders[0].orderID || orders[0].NoPR)) || "ORDER";
+  const lastId = cleanId(orders[orders.length - 1] && (orders[orders.length - 1].OrderID || orders[orders.length - 1].orderID || orders[orders.length - 1].NoPR)) || firstId;
+  const filename = orders.length > 1 && lastId !== firstId
+    ? `Rekap_Order_${firstId}-${lastId}.xlsx`
+    : `Rekap_Order_${firstId}.xlsx`;
 
   wb.xlsx.writeBuffer().then((buffer) => {
     const blob = new Blob([buffer], {
@@ -1310,7 +1315,7 @@ function exportWorkOrderPDF() {
     <!DOCTYPE html>
     <html>
     <head>
-      <title>Order ${o.OrderID}</title>
+      <title>Rekap_Order_${o.OrderID}</title>
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         @page { size: A4 portrait; margin: 10mm; }

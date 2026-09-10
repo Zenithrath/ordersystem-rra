@@ -26,8 +26,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // --- Navigation ---
 function navigateTo(page) {
-  document.querySelectorAll(".page").forEach(p => p.classList.add("hidden"));
-  document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
+  document.querySelectorAll(".page").forEach((p) => p.classList.add("hidden"));
+  document.querySelectorAll(".nav-item").forEach((n) => n.classList.remove("active"));
 
   if (page === "dashboard") {
     document.getElementById("page-dashboard").classList.remove("hidden");
@@ -58,7 +58,7 @@ function toggleSidebar() {
 // ========================================
 
 function loadDashboard() {
-  ApiService.getDashboardStats().then(res => {
+  ApiService.getDashboardStats().then((res) => {
     if (!res.success) return;
     const d = res.data;
 
@@ -102,7 +102,9 @@ function renderRecentOrders(orders) {
     return;
   }
 
-  container.innerHTML = orders.map(o => `
+  container.innerHTML = orders
+    .map(
+      (o) => `
     <div class="px-5 py-3.5 flex items-center justify-between hover:bg-surface-50/50 cursor-pointer transition-colors" onclick="openOrderDetail('${o.OrderID}')">
       <div class="flex items-center gap-3 min-w-0">
         <div class="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${statusBg(o.Status)} ${statusText(o.Status)}">
@@ -118,7 +120,9 @@ function renderRecentOrders(orders) {
         <p class="text-[11px] text-surface-400 mt-1">${o.ItemCount || 0} items</p>
       </div>
     </div>
-  `).join("");
+  `,
+    )
+    .join("");
   lucide.createIcons();
 }
 
@@ -128,7 +132,9 @@ function renderRecentOrders(orders) {
 
 function showOrdersSkeleton() {
   const tbody = document.getElementById("orders-tbody");
-  tbody.innerHTML = Array.from({ length: 5 }, () => `
+  tbody.innerHTML = Array.from(
+    { length: 5 },
+    () => `
     <tr>
       <td class="px-5 py-4"><div class="skeleton h-4 w-28 rounded"></div></td>
       <td class="px-5 py-4 hidden sm:table-cell"><div class="skeleton h-4 w-20 rounded"></div></td>
@@ -138,7 +144,8 @@ function showOrdersSkeleton() {
       <td class="px-5 py-4 text-center"><div class="skeleton h-5 w-16 rounded-full mx-auto"></div></td>
       <td class="px-5 py-4 text-right"><div class="skeleton h-4 w-16 rounded ml-auto"></div></td>
     </tr>
-  `).join("");
+  `,
+  ).join("");
 }
 
 function loadOrders() {
@@ -152,10 +159,10 @@ function loadOrders() {
     pageSize: currentPageSize,
     sort: currentSort.field,
     dir: currentSort.dir,
-    ...currentFilters
+    ...currentFilters,
   };
 
-  ApiService.getOrders(params).then(res => {
+  ApiService.getOrders(params).then((res) => {
     isLoadingOrders = false;
     if (!res.success) {
       showToast(res.message || "Failed to load orders", "error");
@@ -187,7 +194,9 @@ function renderOrdersTable() {
     return;
   }
 
-  tbody.innerHTML = allOrders.map(o => `
+  tbody.innerHTML = allOrders
+    .map(
+      (o) => `
     <tr onclick="openOrderDetail('${o.OrderID}')">
       <td class="px-5 py-4 text-sm font-medium text-surface-800">${o.OrderID}</td>
       <td class="px-5 py-4 text-sm text-surface-500 hidden sm:table-cell">${formatDate(o.Date)}</td>
@@ -209,7 +218,9 @@ function renderOrdersTable() {
         </button>
       </td>
     </tr>
-  `).join("");
+  `,
+    )
+    .join("");
 }
 
 function renderPagination() {
@@ -218,9 +229,7 @@ function renderPagination() {
 
   const start = (currentPage - 1) * currentPageSize + 1;
   const end = Math.min(currentPage * currentPageSize, allOrdersTotal);
-  info.textContent = allOrdersTotal > 0
-    ? `Showing ${start}–${end} of ${allOrdersTotal}`
-    : "No results";
+  info.textContent = allOrdersTotal > 0 ? `Showing ${start}–${end} of ${allOrdersTotal}` : "No results";
 
   // Page size selector + page buttons
   let html = `
@@ -247,9 +256,7 @@ function renderPagination() {
   }
 
   for (let i = startPage; i <= endPage; i++) {
-    const active = i === currentPage
-      ? "bg-primary-500 text-white border-primary-500"
-      : "border-surface-200 hover:bg-surface-50";
+    const active = i === currentPage ? "bg-primary-500 text-white border-primary-500" : "border-surface-200 hover:bg-surface-50";
     html += `<button onclick="goToPage(${i})" class="px-2.5 py-1 text-xs rounded-lg border ${active} transition-colors">${i}</button>`;
   }
 
@@ -291,10 +298,15 @@ function applyFilters() {
   currentFilters.month = document.getElementById("filter-month").value;
 
   const sortVal = document.getElementById("filter-sort").value;
-  if (sortVal === "date-desc") { currentSort = { field: "date", dir: "desc" }; }
-  else if (sortVal === "date-asc") { currentSort = { field: "date", dir: "asc" }; }
-  else if (sortVal === "orderId-asc") { currentSort = { field: "orderId", dir: "asc" }; }
-  else if (sortVal === "orderId-desc") { currentSort = { field: "orderId", dir: "desc" }; }
+  if (sortVal === "date-desc") {
+    currentSort = { field: "date", dir: "desc" };
+  } else if (sortVal === "date-asc") {
+    currentSort = { field: "date", dir: "asc" };
+  } else if (sortVal === "orderId-asc") {
+    currentSort = { field: "orderId", dir: "asc" };
+  } else if (sortVal === "orderId-desc") {
+    currentSort = { field: "orderId", dir: "desc" };
+  }
 
   currentPage = 1;
   loadOrders();
@@ -320,7 +332,7 @@ function refreshOrders() {
 
 function loadFilters() {
   const deptSelect = document.getElementById("filter-department");
-  CONFIG.DEPARTMENTS.forEach(d => {
+  CONFIG.DEPARTMENTS.forEach((d) => {
     const opt = document.createElement("option");
     opt.value = d;
     opt.textContent = d;
@@ -329,7 +341,7 @@ function loadFilters() {
 
   // Populate form department dropdown
   const formDept = document.getElementById("form-department");
-  CONFIG.DEPARTMENTS.forEach(d => {
+  CONFIG.DEPARTMENTS.forEach((d) => {
     const opt = document.createElement("option");
     opt.value = d;
     opt.textContent = d;
@@ -343,13 +355,16 @@ function loadFilters() {
 
 function openOrderDetail(orderId) {
   // Try local cache first
-  const local = allOrders.find(o => o.OrderID === orderId);
+  const local = allOrders.find((o) => o.OrderID === orderId);
   if (local) {
     currentOrder = local;
     renderDrawer(local);
   } else {
-    ApiService.getOrderDetail(orderId).then(res => {
-      if (!res.success) { showToast(res.message, "error"); return; }
+    ApiService.getOrderDetail(orderId).then((res) => {
+      if (!res.success) {
+        showToast(res.message, "error");
+        return;
+      }
       currentOrder = res.data;
       renderDrawer(res.data);
     });
@@ -406,16 +421,22 @@ function renderDrawer(order) {
           <p class="text-sm text-surface-800">${order.Purpose || "-"}</p>
         </div>
       </div>
-      ${order.Notes ? `
+      ${
+        order.Notes
+          ? `
         <div>
           <p class="text-[11px] font-medium text-surface-400 uppercase tracking-wider mb-1">Notes</p>
           <p class="text-sm text-surface-700 bg-surface-50 rounded-xl p-3">${order.Notes}</p>
         </div>
-      ` : ""}
+      `
+          : ""
+      }
       <div>
         <p class="text-[11px] font-medium text-surface-400 uppercase tracking-wider mb-2">Items</p>
         <div class="space-y-2">
-          ${(order.Items || []).map(it => `
+          ${(order.Items || [])
+            .map(
+              (it) => `
             <div class="flex items-center justify-between bg-surface-50 rounded-xl px-3 py-2.5">
               <div class="min-w-0">
                 <p class="text-sm font-medium text-surface-800 truncate">${it.ItemName}</p>
@@ -423,7 +444,9 @@ function renderDrawer(order) {
               </div>
               <span class="text-sm font-semibold text-surface-700 shrink-0 ml-3">${it.Quantity} ${it.Unit}</span>
             </div>
-          `).join("")}
+          `,
+            )
+            .join("")}
         </div>
       </div>
     </div>
@@ -432,7 +455,9 @@ function renderDrawer(order) {
   const isEditable = order.Status !== "Completed" && order.Status !== "Cancelled";
   footer.innerHTML = `
     <div class="flex flex-wrap gap-2">
-      ${isEditable ? `
+      ${
+        isEditable
+          ? `
         <button onclick="editOrder('${order.OrderID}')" class="px-3 py-2 text-xs font-medium text-surface-700 bg-white border border-surface-200 rounded-xl hover:bg-surface-50 transition-colors">
           Edit
         </button>
@@ -445,7 +470,9 @@ function renderDrawer(order) {
         <button onclick="changeStatus('${order.OrderID}', 'Cancelled')" class="px-3 py-2 text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-xl hover:bg-red-100 transition-colors">
           Cancel
         </button>
-      ` : ""}
+      `
+          : ""
+      }
       <button onclick="exportWorkOrderPDF()" class="px-3 py-2 text-xs font-medium text-surface-600 bg-surface-50 border border-surface-200 rounded-xl hover:bg-surface-100 transition-colors ml-auto">
         Export PDF
       </button>
@@ -461,7 +488,7 @@ function renderDrawer(order) {
 // ========================================
 
 function changeStatus(orderId, newStatus) {
-  const oldOrder = allOrders.find(o => o.OrderID === orderId);
+  const oldOrder = allOrders.find((o) => o.OrderID === orderId);
   const oldStatus = oldOrder ? oldOrder.Status : null;
 
   // Optimistic update
@@ -472,7 +499,7 @@ function changeStatus(orderId, newStatus) {
   }
   renderOrdersTable();
 
-  ApiService.updateOrderStatus(orderId, newStatus).then(res => {
+  ApiService.updateOrderStatus(orderId, newStatus).then((res) => {
     if (!res.success) {
       // Rollback
       if (oldOrder) oldOrder.Status = oldStatus;
@@ -489,23 +516,19 @@ function changeStatus(orderId, newStatus) {
 }
 
 function confirmDeleteOrder(orderId) {
-  showConfirm(
-    "Delete Order",
-    "This will permanently delete order " + orderId + ". Continue?",
-    () => {
-      ApiService.deleteOrder(orderId).then(res => {
-        if (res.success) {
-          allOrders = allOrders.filter(o => o.OrderID !== orderId);
-          renderOrdersTable();
-          closeDrawer();
-          showToast("Order deleted", "success");
-          loadDashboard();
-        } else {
-          showToast(res.message || "Failed to delete", "error");
-        }
-      });
-    }
-  );
+  showConfirm("Delete Order", "This will permanently delete order " + orderId + ". Continue?", () => {
+    ApiService.deleteOrder(orderId).then((res) => {
+      if (res.success) {
+        allOrders = allOrders.filter((o) => o.OrderID !== orderId);
+        renderOrdersTable();
+        closeDrawer();
+        showToast("Order deleted", "success");
+        loadDashboard();
+      } else {
+        showToast(res.message || "Failed to delete", "error");
+      }
+    });
+  });
 }
 
 // ========================================
@@ -520,7 +543,7 @@ function addItemRow() {
     <input type="text" placeholder="Item name" required class="item-name px-3 py-2.5 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
     <input type="number" placeholder="Qty" min="1" value="1" required class="item-qty px-3 py-2.5 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
     <select class="item-unit px-3 py-2.5 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400">
-      ${CONFIG.UNITS.map(u => `<option value="${u}">${u}</option>`).join("")}
+      ${CONFIG.UNITS.map((u) => `<option value="${u}">${u}</option>`).join("")}
     </select>
     <input type="text" placeholder="Notes (optional)" class="item-notes px-3 py-2.5 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
     <button type="button" onclick="this.parentElement.remove()" class="w-9 h-9 flex items-center justify-center text-surface-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shrink-0">
@@ -533,14 +556,14 @@ function addItemRow() {
 
 function getFormData() {
   const items = [];
-  document.querySelectorAll("#items-container .item-row").forEach(row => {
+  document.querySelectorAll("#items-container .item-row").forEach((row) => {
     const name = row.querySelector(".item-name").value.trim();
     if (name) {
       items.push({
         itemName: name,
         quantity: parseInt(row.querySelector(".item-qty").value) || 1,
         unit: row.querySelector(".item-unit").value,
-        notes: row.querySelector(".item-notes").value.trim()
+        notes: row.querySelector(".item-notes").value.trim(),
       });
     }
   });
@@ -551,7 +574,7 @@ function getFormData() {
     department: document.getElementById("form-department").value,
     purpose: document.getElementById("form-purpose").value.trim(),
     notes: document.getElementById("form-notes").value.trim(),
-    items
+    items,
   };
 }
 
@@ -573,11 +596,9 @@ function submitOrder() {
   btn.innerHTML = '<span class="spinner"></span> Saving...';
 
   const isEditing = !!editingOrderId;
-  const apiCall = isEditing
-    ? ApiService.updateOrder({ orderId: editingOrderId, ...data })
-    : ApiService.createOrder(data);
+  const apiCall = isEditing ? ApiService.updateOrder({ orderId: editingOrderId, ...data }) : ApiService.createOrder(data);
 
-  apiCall.then(res => {
+  apiCall.then((res) => {
     btn.disabled = false;
     btn.textContent = isEditing ? "Update Order" : "Create Order";
 
@@ -595,7 +616,7 @@ function submitOrder() {
 }
 
 function editOrder(orderId) {
-  const order = allOrders.find(o => o.OrderID === orderId) || currentOrder;
+  const order = allOrders.find((o) => o.OrderID === orderId) || currentOrder;
   if (!order) return;
 
   editingOrderId = orderId;
@@ -613,7 +634,7 @@ function editOrder(orderId) {
 
     const container = document.getElementById("items-container");
     container.innerHTML = "";
-    (order.Items || []).forEach(it => {
+    (order.Items || []).forEach((it) => {
       addItemRow();
       const rows = container.querySelectorAll(".item-row");
       const lastRow = rows[rows.length - 1];
@@ -643,13 +664,13 @@ function resetForm() {
 }
 
 // ========================================
-// Excel Export
+// Excel Export (with xlsx-js-style)
 // ========================================
 
 function exportExcel() {
   showToast("Generating Excel...", "info");
 
-  ApiService.exportExcel(currentFilters).then(res => {
+  ApiService.exportExcel(currentFilters).then((res) => {
     if (!res.success || !res.data) {
       showToast(res.message || "Export failed", "error");
       return;
@@ -661,55 +682,125 @@ function exportExcel() {
       return;
     }
 
-    // Build workbook with SheetJS
     const wb = XLSX.utils.book_new();
+    const headers = ["Order ID", "Date", "Requester", "Department", "Purpose", "Items", "Status", "Notes"];
 
-    // Main data sheet
-    const ws = XLSX.utils.json_to_sheet(rows);
+    const thinBorder = {
+      top: { style: "thin", color: { rgb: "E2E8F0" } },
+      bottom: { style: "thin", color: { rgb: "E2E8F0" } },
+      left: { style: "thin", color: { rgb: "E2E8F0" } },
+      right: { style: "thin", color: { rgb: "E2E8F0" } },
+    };
 
-    // Column widths
+    const headerBorder = {
+      top: { style: "thin", color: { rgb: "0F766E" } },
+      bottom: { style: "thin", color: { rgb: "0F766E" } },
+      left: { style: "thin", color: { rgb: "0F766E" } },
+      right: { style: "thin", color: { rgb: "0F766E" } },
+    };
+
+    const statusStyles = {
+      "Pending":     { fg: "FEF3C7", fc: "92400E" },
+      "In Progress": { fg: "DBEAFE", fc: "1E40AF" },
+      "Completed":   { fg: "D1FAE5", fc: "065F46" },
+      "Cancelled":   { fg: "FEE2E2", fc: "991B1B" },
+    };
+
+    // --- Work Orders sheet ---
+    const ws = XLSX.utils.aoa_to_sheet([headers]);
     ws["!cols"] = [
-      { wch: 18 }, // Order ID
-      { wch: 12 }, // Date
-      { wch: 18 }, // Requester
-      { wch: 16 }, // Department
-      { wch: 22 }, // Purpose
-      { wch: 40 }, // Items
-      { wch: 12 }, // Status
-      { wch: 22 }, // Notes
+      { wch: 18 }, { wch: 12 }, { wch: 18 }, { wch: 16 },
+      { wch: 22 }, { wch: 40 }, { wch: 12 }, { wch: 22 },
     ];
 
+    // Style header row
+    headers.forEach((_, ci) => {
+      const addr = XLSX.utils.encode_cell({ r: 0, c: ci });
+      ws[addr].s = {
+        fill: { fgColor: { rgb: "0D9488" } },
+        font: { bold: true, color: { rgb: "FFFFFF" }, sz: 10 },
+        alignment: { horizontal: "center" },
+        border: headerBorder,
+      };
+    });
+
+    // Add data rows with styling
+    rows.forEach((r, ri) => {
+      const rowNum = ri + 1;
+      const vals = [r["Order ID"], r["Date"], r["Requester"], r["Department"], r["Purpose"], r["Items"], r["Status"], r["Notes"]];
+      vals.forEach((v, ci) => {
+        const addr = XLSX.utils.encode_cell({ r: rowNum, c: ci });
+        ws[addr] = { v: v || "", t: "s" };
+
+        const cellStyle = {
+          border: thinBorder,
+          alignment: { wrapText: ci === 5 || ci === 7 },
+        };
+
+        if (ri % 2 === 0) {
+          cellStyle.fill = { fgColor: { rgb: "F0FDF4" } };
+        }
+
+        if (ci === 6) {
+          const sc = statusStyles[v];
+          if (sc) {
+            cellStyle.fill = { fgColor: { rgb: sc.fg } };
+            cellStyle.font = { color: { rgb: sc.fc }, bold: true, sz: 10 };
+          }
+        }
+
+        ws[addr].s = cellStyle;
+      });
+    });
+
+    ws["!ref"] = XLSX.utils.encode_range({ s: { c: 0, r: 0 }, e: { c: 7, r: rows.length } });
     XLSX.utils.book_append_sheet(wb, ws, "Work Orders");
 
-    // Summary sheet
+    // --- Summary sheet ---
     const statusCounts = {};
     const deptCounts = {};
-    rows.forEach(r => {
+    rows.forEach((r) => {
       statusCounts[r.Status] = (statusCounts[r.Status] || 0) + 1;
       deptCounts[r.Department] = (deptCounts[r.Department] || 0) + 1;
     });
 
-    const summaryRows = [
-      { Metric: "Total Orders", Value: rows.length },
-      { Metric: "Pending", Value: statusCounts["Pending"] || 0 },
-      { Metric: "In Progress", Value: statusCounts["In Progress"] || 0 },
-      { Metric: "Completed", Value: statusCounts["Completed"] || 0 },
-      { Metric: "Cancelled", Value: statusCounts["Cancelled"] || 0 },
-      { Metric: "", Value: "" },
-      { Metric: "Department Breakdown", Value: "" },
+    const summaryData = [
+      ["Metric", "Value"],
+      ["Total Orders", rows.length],
+      ["Pending", statusCounts["Pending"] || 0],
+      ["In Progress", statusCounts["In Progress"] || 0],
+      ["Completed", statusCounts["Completed"] || 0],
+      ["Cancelled", statusCounts["Cancelled"] || 0],
+      ["", ""],
+      ["Department Breakdown", ""],
     ];
-    Object.keys(deptCounts).sort().forEach(dept => {
-      summaryRows.push({ Metric: dept, Value: deptCounts[dept] });
+    Object.keys(deptCounts).sort().forEach((dept) => {
+      summaryData.push([dept, deptCounts[dept]]);
     });
 
-    const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
-    wsSummary["!cols"] = [{ wch: 22 }, { wch: 12 }];
-    XLSX.utils.book_append_sheet(wb, wsSummary, "Summary");
+    const ws2 = XLSX.utils.aoa_to_sheet(summaryData);
+    ws2["!cols"] = [{ wch: 22 }, { wch: 12 }];
 
-    // Generate and download
+    // Style summary header
+    ["A1", "B1"].forEach((addr) => {
+      if (ws2[addr]) ws2[addr].s = {
+        fill: { fgColor: { rgb: "0D9488" } },
+        font: { bold: true, color: { rgb: "FFFFFF" }, sz: 10 },
+        border: headerBorder,
+      };
+    });
+
+    for (let ri = 1; ri < summaryData.length; ri++) {
+      for (let ci = 0; ci < 2; ci++) {
+        const addr = XLSX.utils.encode_cell({ r: ri, c: ci });
+        if (ws2[addr]) ws2[addr].s = { border: thinBorder };
+      }
+    }
+
+    XLSX.utils.book_append_sheet(wb, ws2, "Summary");
+
     const filename = res.filename || "work_orders";
     XLSX.writeFile(wb, filename + ".xlsx");
-
     showToast("Excel downloaded", "success");
   });
 }
@@ -727,7 +818,7 @@ function exportWorkOrderPDF() {
     <!DOCTYPE html>
     <html>
     <head>
-      <title>Work Order ${o.OrderID}</title>
+      <title>Order ${o.OrderID}</title>
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: Arial, sans-serif; padding: 40px; color: #333; }
@@ -754,7 +845,7 @@ function exportWorkOrderPDF() {
     <body>
       <div class="header">
         <div>
-          <div class="title">Work Order</div>
+          <div class="title">Order</div>
           <div class="subtitle">PT. RRA — Order Management System</div>
         </div>
         <div style="text-align:right">
@@ -771,17 +862,23 @@ function exportWorkOrderPDF() {
       <table>
         <thead><tr><th>#</th><th>Item</th><th>Qty</th><th>Unit</th><th>Notes</th></tr></thead>
         <tbody>
-          ${(o.Items || []).map((it, i) => `
+          ${(o.Items || [])
+            .map(
+              (it, i) => `
             <tr><td>${i + 1}</td><td>${it.ItemName}</td><td>${it.Quantity}</td><td>${it.Unit}</td><td>${it.Notes || ""}</td></tr>
-          `).join("")}
+          `,
+            )
+            .join("")}
         </tbody>
       </table>
       ${o.Notes ? `<div class="notes"><strong>Notes:</strong> ${o.Notes}</div>` : ""}
-      <div class="footer">Generated ${new Date().toLocaleDateString("id-ID")} &middot; Work Order Management System</div>
+      <div class="footer">Generated ${new Date().toLocaleDateString("id-ID")} &middot; Order Management System</div>
     </body></html>
   `);
   printWindow.document.close();
-  setTimeout(() => { printWindow.print(); }, 500);
+  setTimeout(() => {
+    printWindow.print();
+  }, 500);
 }
 
 // ========================================
@@ -789,13 +886,13 @@ function exportWorkOrderPDF() {
 // ========================================
 
 function statusClass(status) {
-  return { "Pending": "pending", "In Progress": "in-progress", "Completed": "completed", "Cancelled": "cancelled" }[status] || "pending";
+  return { Pending: "pending", "In Progress": "in-progress", Completed: "completed", Cancelled: "cancelled" }[status] || "pending";
 }
 function statusBg(status) {
-  return { "Pending": "bg-amber-100", "In Progress": "bg-blue-100", "Completed": "bg-emerald-100", "Cancelled": "bg-red-100" }[status] || "bg-surface-100";
+  return { Pending: "bg-amber-100", "In Progress": "bg-blue-100", Completed: "bg-emerald-100", Cancelled: "bg-red-100" }[status] || "bg-surface-100";
 }
 function statusText(status) {
-  return { "Pending": "text-amber-600", "In Progress": "text-blue-600", "Completed": "text-emerald-600", "Cancelled": "text-red-600" }[status] || "text-surface-600";
+  return { Pending: "text-amber-600", "In Progress": "text-blue-600", Completed: "text-emerald-600", Cancelled: "text-red-600" }[status] || "text-surface-600";
 }
 
 function formatDate(dateStr) {

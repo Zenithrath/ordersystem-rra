@@ -6,7 +6,7 @@
     <title>Order Management System</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.0.0/dist/xlsx.bundle.js"></script>
     <link rel="stylesheet" href="style.css" />
     <script>
       tailwind.config = {
@@ -22,7 +22,6 @@
     </script>
   </head>
   <body class="bg-surface-50 text-surface-800 font-sans antialiased">
-
     <!-- Sidebar -->
     <aside id="sidebar" class="fixed top-0 left-0 h-full w-64 bg-white border-r border-surface-200 z-40 transform transition-transform duration-300 lg:translate-x-0 -translate-x-full">
       <div class="flex items-center gap-3 px-6 py-5 border-b border-surface-100">
@@ -65,14 +64,12 @@
 
       <!-- Page Content -->
       <div class="p-4 sm:p-6">
-
         <!-- ==================== DASHBOARD / OVERVIEW ==================== -->
         <section id="page-dashboard" class="page">
-
           <!-- Greeting -->
           <div class="mb-6">
             <h3 class="text-xl sm:text-2xl font-bold text-surface-800">Welcome back, Admin</h3>
-            <p class="text-sm text-surface-500 mt-1">Here's an overview of your work orders</p>
+            <p class="text-sm text-surface-500 mt-1">Here's an overview of your orders</p>
           </div>
 
           <!-- Stats Cards -->
@@ -122,7 +119,7 @@
           <!-- New Work Order Form -->
           <div class="bg-white rounded-2xl border border-surface-100 shadow-sm mb-6">
             <div class="px-5 py-4 border-b border-surface-100">
-              <h4 class="text-sm font-semibold text-surface-700">New Work Order</h4>
+              <h4 class="text-sm font-semibold text-surface-700">New Order</h4>
             </div>
             <div class="p-5">
               <form id="order-form" onsubmit="return false;">
@@ -135,7 +132,13 @@
                   </div>
                   <div>
                     <label class="block text-xs font-medium text-surface-600 mb-1.5">Requester Name *</label>
-                    <input id="form-requester" type="text" required placeholder="Enter name" class="w-full px-3 py-2.5 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
+                    <input
+                      id="form-requester"
+                      type="text"
+                      required
+                      placeholder="Enter name"
+                      class="w-full px-3 py-2.5 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400"
+                    />
                   </div>
                   <div>
                     <label class="block text-xs font-medium text-surface-600 mb-1.5">Department *</label>
@@ -145,13 +148,24 @@
                   </div>
                   <div>
                     <label class="block text-xs font-medium text-surface-600 mb-1.5">Purpose *</label>
-                    <input id="form-purpose" type="text" required placeholder="Purpose of order" class="w-full px-3 py-2.5 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
+                    <input
+                      id="form-purpose"
+                      type="text"
+                      required
+                      placeholder="Purpose of order"
+                      class="w-full px-3 py-2.5 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400"
+                    />
                   </div>
                 </div>
 
                 <div class="mt-4">
                   <label class="block text-xs font-medium text-surface-600 mb-1.5">Notes</label>
-                  <textarea id="form-notes" rows="2" placeholder="Optional notes" class="w-full px-3 py-2.5 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 resize-none"></textarea>
+                  <textarea
+                    id="form-notes"
+                    rows="2"
+                    placeholder="Optional notes"
+                    class="w-full px-3 py-2.5 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 resize-none"
+                  ></textarea>
                 </div>
 
                 <!-- Items -->
@@ -188,19 +202,23 @@
               </div>
             </div>
           </div>
-
         </section>
 
         <!-- ==================== ORDERS PAGE ==================== -->
         <section id="page-orders" class="page hidden">
-
           <!-- Search & Filters -->
           <div class="bg-white rounded-2xl border border-surface-100 shadow-sm mb-4">
             <div class="p-4">
               <div class="flex flex-col sm:flex-row gap-3">
                 <div class="relative flex-1">
                   <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-400"></i>
-                  <input id="search-input" type="text" placeholder="Search by Order ID, name, or item..." class="w-full pl-10 pr-4 py-2.5 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 transition-all" oninput="debounceSearch()" />
+                  <input
+                    id="search-input"
+                    type="text"
+                    placeholder="Search by Order ID, name, or item..."
+                    class="w-full pl-10 pr-4 py-2.5 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 transition-all"
+                    oninput="debounceSearch()"
+                  />
                 </div>
                 <div class="flex gap-2">
                   <button onclick="refreshOrders()" class="inline-flex items-center gap-2 px-3 py-2.5 text-sm font-medium text-surface-600 bg-surface-50 border border-surface-200 rounded-xl hover:bg-surface-100 transition-colors">
@@ -276,9 +294,7 @@
               <div id="pagination-buttons" class="flex gap-1"></div>
             </div>
           </div>
-
         </section>
-
       </div>
     </main>
 

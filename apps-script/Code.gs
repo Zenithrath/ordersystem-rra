@@ -1,11 +1,12 @@
 // ========================================
 // Work Order Management System - Backend
-// Google Apps Script (Clean Single Sheet)
+// Google Apps Script (Flat Rows - No JSON)
 // ========================================
 
 const SHEET_ORDERS = "ORDERS";
 const SHEET_ITEMS = "ORDER_ITEMS";
 const CACHE_TTL = 180;
+const COL_COUNT = 11;
 
 function doGet(e) {
   const action = (e && e.parameter) ? e.parameter.action : "getDashboardStats";
@@ -31,8 +32,8 @@ function doGet(e) {
 }
 
 // ========================================
-// Sheet: OrderID | Date | RequesterName | Department | Purpose | Notes | Status | Items
-// Items = JSON string, display = clean text
+// Sheet: OrderID | Date | RequesterName | Department | Purpose | Notes | Status | ItemName | Quantity | Unit | ItemNotes
+// Each item = 1 row. Order data repeated.
 // ========================================
 
 function getSheet(name) {
@@ -41,7 +42,7 @@ function getSheet(name) {
   if (!sheet) {
     sheet = ss.insertSheet(name);
     if (name === SHEET_ORDERS) {
-      sheet.appendRow(["OrderID", "Date", "RequesterName", "Department", "Purpose", "Notes", "Status", "Items"]);
+      sheet.appendRow(["OrderID", "Date", "RequesterName", "Department", "Purpose", "Notes", "Status", "ItemName", "Quantity", "Unit", "ItemNotes"]);
     }
   }
   return sheet;
@@ -55,7 +56,7 @@ function generateOrderID() {
   const lastRow = sheet.getLastRow();
   let maxNum = 0;
   if (lastRow > 1) {
-    const readStart = Math.max(2, lastRow - 99);
+    const readStart = Math.max(2, lastRow - 199);
     const ids = sheet.getRange(readStart, 1, lastRow - readStart + 1, 1).getValues();
     for (let i = 0; i < ids.length; i++) {
       const oid = ids[i][0];
@@ -68,52 +69,56 @@ function generateOrderID() {
   return prefix + String(maxNum + 1).padStart(3, "0");
 }
 
+// Read orders: group flat rows by OrderID
 function readOrders() {
   const sheet = getSheet(SHEET_ORDERS);
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
 
-  const numCols = sheet.getLastColumn();
-  const data = sheet.getRange(1, 1, lastRow, numCols).getValues();
-  const headers = data[0];
-  const orders = [];
+  const data = sheet.getRange(1, 1, lastRow, COL_COUNT).getValues();
+  const orderMap = {};
+  const orderKeys = [];
 
   for (let i = 1; i < data.length; i++) {
-    const row = data[i];
-    const obj = {};
-    headers.forEach((h, j) => { obj[h] = row[j]; });
+    const r = data[i];
+    const oid = String(r[0] || "").trim();
+    if (!oid) continue;
 
-    // Parse items JSON -> clean text
-    let items = [];
-    try {
-      const raw = obj.Items || "";
-      const parsed = typeof raw === "string" && raw.startsWith("[") ? JSON.parse(raw) : [];
-      items = Array.isArray(parsed) ? parsed.map(it => ({
-        ItemName: it.ItemName || it.itemName || "",
-        Quantity: parseInt(it.Quantity || it.quantity) || 0,
-        Unit: it.Unit || it.unit || "pcs",
-        Notes: it.Notes || it.notes || ""
-      })) : [];
-    } catch (e) { items = []; }
+    if (!orderMap[oid]) {
+      orderMap[oid] = {
+        OrderID: oid,
+        Date: r[1] || "",
+        RequesterName: String(r[2] || ""),
+        Department: String(r[3] || ""),
+        Purpose: String(r[4] || ""),
+        Notes: String(r[5] || ""),
+        Status: String(r[6] || "Pending"),
+        Items: []
+      };
+      orderKeys.push(oid);
+    }
 
-    orders.push({
-      OrderID: obj.OrderID || row[0] || "",
-      Date: obj.Date || row[1] || "",
-      RequesterName: obj.RequesterName || row[2] || "",
-      Department: obj.Department || row[3] || "",
-      Purpose: obj.Purpose || row[4] || "",
-      Notes: obj.Notes || row[5] || "",
-      Status: obj.Status || row[6] || "Pending",
-      Items: items,
-      ItemCount: items.length,
-      ItemNames: items.map(it => {
-        let s = it.ItemName + " (" + it.Quantity + " " + it.Unit + ")";
-        if (it.Notes) s += " - " + it.Notes;
-        return s;
-      }).join(", ")
-    });
+    const itemName = String(r[7] || "").trim();
+    if (itemName) {
+      orderMap[oid].Items.push({
+        ItemName: itemName,
+        Quantity: parseInt(r[8]) || 0,
+        Unit: String(r[9] || "pcs"),
+        Notes: String(r[10] || "")
+      });
+    }
   }
-  return orders;
+
+  return orderKeys.map(oid => {
+    const o = orderMap[oid];
+    o.ItemCount = o.Items.length;
+    o.ItemNames = o.Items.map(it => {
+      let s = it.ItemName + " (" + it.Quantity + " " + it.Unit + ")";
+      if (it.Notes) s += " - " + it.Notes;
+      return s;
+    }).join(", ");
+    return o;
+  });
 }
 
 // ========================================
@@ -129,81 +134,97 @@ function migrateData() {
   const numCols = ordersSheet.getLastColumn();
   const headers = ordersSheet.getRange(1, 1, 1, numCols).getValues()[0];
 
-  // Count how many Items columns exist
-  const itemsColIndices = [];
-  for (let i = 0; i < headers.length; i++) {
-    if (headers[i] === "Items") itemsColIndices.push(i);
-  }
-
-  // If duplicate Items columns, consolidate to first one and delete extras
-  if (itemsColIndices.length > 1) {
-    const lastRow = ordersSheet.getLastRow();
-    if (lastRow > 1) {
-      const allData = ordersSheet.getRange(1, 1, lastRow, numCols).getValues();
-      // Use first Items column, fill from others if empty
-      for (let r = 1; r < allData.length; r++) {
-        let itemsJson = allData[r][itemsColIndices[0]] || "";
-        // If first items col is empty, try second
-        if (!itemsJson && itemsColIndices.length > 1) {
-          itemsJson = allData[r][itemsColIndices[1]] || "";
-        }
-        allData[r][itemsColIndices[0]] = itemsJson;
-      }
-      // Rewrite all data with only 8 columns (keep first 7 + first Items)
-      ordersSheet.clearContents();
-      const cleanHeaders = headers.slice(0, 7).concat(["Items"]);
-      ordersSheet.getRange(1, 1, 1, 8).setValues([cleanHeaders]);
-      const cleanRows = [];
-      for (let r = 1; r < allData.length; r++) {
-        cleanRows.push(allData[r].slice(0, 7).concat([allData[r][itemsColIndices[0]] || "[]"]));
-      }
-      if (cleanRows.length > 0) {
-        ordersSheet.getRange(2, 1, cleanRows.length, 8).setValues(cleanRows);
-      }
-    }
+  // Already flat rows?
+  if (headers.includes("ItemName") && headers.includes("ItemNotes")) {
     if (itemsSheet) { try { ss.deleteSheet(itemsSheet); } catch(e) {} }
-    return { success: true, message: "Duplicate Items columns merged" };
+    return { success: true, message: "Sudah di-migrate (flat rows)" };
   }
 
-  // If no Items column yet, do full migration
-  if (itemsColIndices.length === 0) {
-    // Read items from old sheet
-    const itemData = {};
-    if (itemsSheet && itemsSheet.getLastRow() > 1) {
-      const iRows = itemsSheet.getDataRange().getValues();
-      for (let i = 1; i < iRows.length; i++) {
-        const oid = String(iRows[i][0]);
-        if (!itemData[oid]) itemData[oid] = [];
-        itemData[oid].push({
-          ItemName: String(iRows[i][1] || ""),
-          Quantity: Number(iRows[i][2]) || 0,
-          Unit: String(iRows[i][3] || "pcs"),
-          Notes: String(iRows[i][4] || "")
-        });
-      }
+  // Read all data
+  const lastRow = ordersSheet.getLastRow();
+  if (lastRow < 2) return { success: false, message: "Tidak ada data" };
+
+  const allData = ordersSheet.getRange(1, 1, lastRow, numCols).getValues();
+  const oldHeaders = allData[0];
+
+  // Find column indices
+  const colIdx = {};
+  oldHeaders.forEach((h, i) => { colIdx[h] = i; });
+
+  // Read items from old ORDER_ITEMS sheet
+  const itemData = {};
+  if (itemsSheet && itemsSheet.getLastRow() > 1) {
+    const iRows = itemsSheet.getDataRange().getValues();
+    for (let i = 1; i < iRows.length; i++) {
+      const oid = String(iRows[i][0]).trim();
+      if (!oid) continue;
+      if (!itemData[oid]) itemData[oid] = [];
+      itemData[oid].push({
+        ItemName: String(iRows[i][1] || ""),
+        Quantity: Number(iRows[i][2]) || 0,
+        Unit: String(iRows[i][3] || "pcs"),
+        Notes: String(iRows[i][4] || "")
+      });
     }
-
-    const lastRow = ordersSheet.getLastRow();
-    if (lastRow < 2) return { success: false, message: "Tidak ada data" };
-    const oData = ordersSheet.getRange(1, 1, lastRow, numCols).getValues();
-
-    const newRows = [];
-    for (let i = 1; i < oData.length; i++) {
-      const r = oData[i];
-      const oid = String(r[0] || "");
-      newRows.push([oid, r[1] || "", r[2] || "", r[3] || "", r[4] || "", r[5] || "", r[6] || "Pending", JSON.stringify(itemData[oid] || [])]);
-    }
-
-    ordersSheet.clearContents();
-    ordersSheet.getRange(1, 1, 1, 8).setValues([["OrderID", "Date", "RequesterName", "Department", "Purpose", "Notes", "Status", "Items"]]);
-    if (newRows.length > 0) ordersSheet.getRange(2, 1, newRows.length, 8).setValues(newRows);
-
-    if (itemsSheet) { try { ss.deleteSheet(itemsSheet); } catch(e) {} }
-    return { success: true, message: "Berhasil migrate " + newRows.length + " orders" };
   }
 
-  // Already migrated (1 Items column, no CreatedAt)
-  return { success: true, message: "Sudah di-migrate" };
+  // Build flat rows
+  const newRows = [];
+  for (let i = 1; i < allData.length; i++) {
+    const r = allData[i];
+    const oid = String(r[colIdx["OrderID"] || 0] || "").trim();
+    if (!oid) continue;
+
+    const date = r[colIdx["Date"] || 1] || "";
+    const requester = String(r[colIdx["RequesterName"] || 2] || "");
+    const dept = String(r[colIdx["Department"] || 3] || "");
+    const purpose = String(r[colIdx["Purpose"] || 4] || "");
+    const notes = String(r[colIdx["Notes"] || 5] || "");
+    const status = String(r[colIdx["Status"] || 6] || "Pending");
+
+    // Check if Items column has JSON
+    let items = [];
+    const itemsCol = colIdx["Items"];
+    if (itemsCol !== undefined && r[itemsCol]) {
+      try {
+        const parsed = JSON.parse(String(r[itemsCol]));
+        if (Array.isArray(parsed)) items = parsed;
+      } catch(e) {}
+    }
+
+    // Fallback to ORDER_ITEMS sheet data
+    if (items.length === 0 && itemData[oid]) {
+      items = itemData[oid];
+    }
+
+    // If still no items, create one empty row
+    if (items.length === 0) {
+      items = [{ ItemName: "", Quantity: 0, Unit: "pcs", Notes: "" }];
+    }
+
+    // Write one row per item
+    for (const it of items) {
+      newRows.push([
+        oid, date, requester, dept, purpose, notes, status,
+        it.ItemName || it.itemName || "",
+        parseInt(it.Quantity || it.quantity) || 0,
+        it.Unit || it.unit || "pcs",
+        it.Notes || it.notes || ""
+      ]);
+    }
+  }
+
+  // Rewrite sheet
+  ordersSheet.clearContents();
+  ordersSheet.getRange(1, 1, 1, COL_COUNT).setValues([["OrderID", "Date", "RequesterName", "Department", "Purpose", "Notes", "Status", "ItemName", "Quantity", "Unit", "ItemNotes"]]);
+  if (newRows.length > 0) {
+    ordersSheet.getRange(2, 1, newRows.length, COL_COUNT).setValues(newRows);
+  }
+
+  // Delete old sheet
+  if (itemsSheet) { try { ss.deleteSheet(itemsSheet); } catch(e) {} }
+  CacheService.getScriptCache().remove("dashboard_stats");
+  return { success: true, message: "Berhasil migrate " + newRows.length + " baris (flat)" };
 }
 
 // ========================================
@@ -296,17 +317,20 @@ function createOrder(body) {
 
   const orderId = generateOrderID();
   const orderDate = date || Utilities.formatDate(new Date(), "Asia/Jakarta", "yyyy-MM-dd");
-  const itemsJson = JSON.stringify(items.map(it => ({
-    ItemName: it.itemName || "",
-    Quantity: parseInt(it.quantity) || 0,
-    Unit: it.unit || "pcs",
-    Notes: it.notes || ""
-  })));
+  const sheet = getSheet(SHEET_ORDERS);
 
-  getSheet(SHEET_ORDERS).appendRow([
+  const rows = items.map(it => [
     orderId, orderDate, requesterName, department,
-    purpose || "", notes || "", "Pending", itemsJson
+    purpose || "", notes || "", "Pending",
+    it.itemName || "",
+    parseInt(it.quantity) || 0,
+    it.unit || "pcs",
+    it.notes || ""
   ]);
+
+  if (rows.length > 0) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, COL_COUNT).setValues(rows);
+  }
 
   CacheService.getScriptCache().remove("dashboard_stats");
   return { success: true, message: "Order created successfully", data: { orderId } };
@@ -318,25 +342,32 @@ function updateOrder(body) {
 
   const sheet = getSheet(SHEET_ORDERS);
   const data = sheet.getDataRange().getValues();
-  let rowIndex = -1;
+  const startRow = [];
   for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === orderId) { rowIndex = i + 1; break; }
+    if (data[i][0] === orderId) startRow.push(i + 1);
   }
-  if (rowIndex === -1) return { success: false, message: "Order not found" };
+  if (startRow.length === 0) return { success: false, message: "Order not found" };
 
-  if (date) sheet.getRange(rowIndex, 2).setValue(date);
-  if (requesterName) sheet.getRange(rowIndex, 3).setValue(requesterName);
-  if (department) sheet.getRange(rowIndex, 4).setValue(department);
-  if (purpose !== undefined) sheet.getRange(rowIndex, 5).setValue(purpose);
-  if (notes !== undefined) sheet.getRange(rowIndex, 6).setValue(notes);
-  if (items && Array.isArray(items)) {
-    sheet.getRange(rowIndex, 8).setValue(JSON.stringify(items.map(it => ({
-      ItemName: it.itemName || "",
-      Quantity: parseInt(it.quantity) || 0,
-      Unit: it.unit || "pcs",
-      Notes: it.notes || ""
-    }))));
+  // Delete old rows (bottom to top)
+  for (let i = startRow.length - 1; i >= 0; i--) {
+    sheet.deleteRow(startRow[i]);
   }
+
+  // Insert new rows
+  const orderDate = date || data[startRow[0] - 1][1];
+  const rows = (items && items.length > 0 ? items : [{ itemName: "", quantity: 0, unit: "pcs", notes: "" }]).map(it => [
+    orderId, orderDate, requesterName || "",
+    department || "", purpose || "", notes || "",
+    data[startRow[0] - 1][6] || "Pending",
+    it.itemName || "",
+    parseInt(it.quantity) || 0,
+    it.unit || "pcs",
+    it.notes || ""
+  ]);
+
+  const insertIdx = startRow[0];
+  sheet.insertRows(insertIdx, rows.length);
+  sheet.getRange(insertIdx, 1, rows.length, COL_COUNT).setValues(rows);
 
   CacheService.getScriptCache().remove("dashboard_stats");
   return { success: true, message: "Order updated successfully" };
@@ -352,25 +383,25 @@ function updateOrderStatus(body) {
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] === orderId) {
       sheet.getRange(i + 1, 7).setValue(status);
-      CacheService.getScriptCache().remove("dashboard_stats");
-      return { success: true, message: "Status updated to " + status };
     }
   }
-  return { success: false, message: "Order not found" };
+  CacheService.getScriptCache().remove("dashboard_stats");
+  return { success: true, message: "Status updated to " + status };
 }
 
 function deleteOrder(orderId) {
   if (!orderId) return { success: false, message: "Order ID is required" };
   const sheet = getSheet(SHEET_ORDERS);
   const data = sheet.getDataRange().getValues();
+  const rowsToDelete = [];
   for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === orderId) {
-      sheet.deleteRow(i + 1);
-      CacheService.getScriptCache().remove("dashboard_stats");
-      return { success: true, message: "Order deleted successfully" };
-    }
+    if (data[i][0] === orderId) rowsToDelete.push(i + 1);
   }
-  return { success: false, message: "Order not found" };
+  for (let i = rowsToDelete.length - 1; i >= 0; i--) {
+    sheet.deleteRow(rowsToDelete[i]);
+  }
+  CacheService.getScriptCache().remove("dashboard_stats");
+  return { success: true, message: "Order deleted successfully" };
 }
 
 // ========================================

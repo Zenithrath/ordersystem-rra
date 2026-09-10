@@ -106,7 +106,11 @@ function readOrders() {
       Status: obj.Status || row[6] || "Pending",
       Items: items,
       ItemCount: items.length,
-      ItemNames: items.map(it => it.ItemName + " (" + it.Quantity + " " + it.Unit + ")").join(", ")
+      ItemNames: items.map(it => {
+        let s = it.ItemName + " (" + it.Quantity + " " + it.Unit + ")";
+        if (it.Notes) s += " - " + it.Notes;
+        return s;
+      }).join(", ")
     });
   }
   return orders;

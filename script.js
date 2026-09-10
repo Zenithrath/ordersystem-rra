@@ -206,7 +206,6 @@ function renderOrdersTable() {
       (o) => {
         const checked = selectedOrders.has(o.OrderID) ? "checked" : "";
         const itemNames = o.ItemNames || (o.Items || []).map(it => it.ItemName).join(", ");
-        const allClear = o.Items && o.Items.length > 0 && o.Items.every(it => it.Clear);
         return `
     <tr class="${selectedOrders.has(o.OrderID) ? 'bg-primary-50/50' : ''}">
       <td class="px-5 py-4 w-10">
@@ -228,9 +227,6 @@ function renderOrdersTable() {
       </td>
       <td class="px-5 py-4 text-center cursor-pointer" onclick="openOrderDetail('${o.OrderID}')">
         <span class="badge badge-${statusClass(o.Status)}">${o.Status}</span>
-      </td>
-      <td class="px-5 py-4 text-center cursor-pointer" onclick="openOrderDetail('${o.OrderID}')">
-        ${allClear ? '<span class="text-green-500 text-lg">&#10003;</span>' : '<span class="text-surface-300 text-lg">&#10007;</span>'}
       </td>
       <td class="px-5 py-4 text-right">
         <button onclick="event.stopPropagation(); openOrderDetail('${o.OrderID}')" class="text-xs font-medium text-primary-500 hover:text-primary-600 transition-colors">
@@ -628,7 +624,6 @@ function renderDrawer(order) {
                 <th class="text-center py-2 px-2">QTY</th>
                 <th class="text-center py-2 px-2">UOM</th>
                 <th class="text-center py-2 px-2">SALDO</th>
-                <th class="text-center py-2 px-2">CLEAR</th>
               </tr>
             </thead>
             <tbody>
@@ -641,7 +636,6 @@ function renderDrawer(order) {
                   <td class="py-2 px-2 text-center text-surface-700">${it.Quantity}</td>
                   <td class="py-2 px-2 text-center text-surface-500">${it.Unit}</td>
                   <td class="py-2 px-2 text-center text-surface-500">${it.SaldoQty || 0} ${it.SaldoUom || it.Unit || ""}</td>
-                  <td class="py-2 px-2 text-center">${it.Clear ? '<span class="text-green-500 font-bold">&#10003;</span>' : '<span class="text-surface-300">&#10007;</span>'}</td>
                 </tr>
               `).join("")}
             </tbody>
@@ -777,10 +771,6 @@ function addItemRow() {
           ${CONFIG.UNITS.map((u) => `<option value="${u}">${u}</option>`).join("")}
         </select>
       </div>
-      <label class="flex items-center gap-1.5 text-xs text-surface-600 shrink-0 mt-4">
-        <input type="checkbox" class="item-clear w-4 h-4 rounded border-surface-300 text-green-500 focus:ring-green-500/20" />
-        Clear
-      </label>
     </div>
   `;
   container.appendChild(row);
@@ -800,7 +790,7 @@ function getFormData() {
         unit: row.querySelector(".item-unit").value,
         saldoQty: parseInt(row.querySelector(".item-saldo-qty").value) || 0,
         saldoUom: row.querySelector(".item-saldo-uom").value,
-        clear: row.querySelector(".item-clear").checked,
+        clear: false,
       });
     }
   });
@@ -886,7 +876,6 @@ function editOrder(orderId) {
       lastRow.querySelector(".item-unit").value = it.Unit || "pcs";
       lastRow.querySelector(".item-saldo-qty").value = it.SaldoQty || 0;
       lastRow.querySelector(".item-saldo-uom").value = it.SaldoUom || it.Unit || "pcs";
-      lastRow.querySelector(".item-clear").checked = it.Clear || false;
     });
 
     document.getElementById("btn-submit-order").textContent = "Update Order";

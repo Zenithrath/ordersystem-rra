@@ -148,107 +148,69 @@ function readOrders() {
 
 function migrateData() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const oldOrdersSheet = ss.getSheetByName(SHEET_ORDERS);
-  const oldItemsSheet = ss.getSheetByName(SHEET_ITEMS);
+  const ordersSheet = ss.getSheetByName(SHEET_ORDERS);
+  const itemsSheet = ss.getSheetByName(SHEET_ITEMS);
 
-  if (!oldOrdersSheet) return { success: false, message: "No ORDERS sheet found" };
+  if (!ordersSheet) return { success: false, message: "Sheet ORDERS tidak ditemukan" };
 
-  const lastRow = oldOrdersSheet.getLastRow();
-  if (lastRow < 2) return { success: false, message: "No data to migrate" };
-
-  // Read ALL columns that exist (may be 9 or 10)
-  const numCols = oldOrdersSheet.getLastColumn();
-  const ordersData = oldOrdersSheet.getRange(1, 1, lastRow, numCols).getValues();
-  const ordersHeaders = ordersData[0];
-
-  // Build header map
-  const headerMap = {};
-  ordersHeaders.forEach((h, i) => { headerMap[h] = i; });
-
-  const oldOrders = [];
-  for (let i = 1; i < ordersData.length; i++) {
-    const row = ordersData[i];
-    oldOrders.push({
-      OrderID: row[headerMap["OrderID"]] || row[0] || "",
-      Date: row[headerMap["Date"]] || row[1] || "",
-      RequesterName: row[headerMap["RequesterName"]] || row[2] || "",
-      Department: row[headerMap["Department"]] || row[3] || "",
-      Purpose: row[headerMap["Purpose"]] || row[4] || "",
-      Notes: row[headerMap["Notes"]] || row[5] || "",
-      Status: row[headerMap["Status"]] || row[6] || "Pending",
-      CreatedAt: row[headerMap["CreatedAt"]] || row[7] || "",
-      CompletedAt: row[headerMap["CompletedAt"]] || row[8] || ""
-    });
-  }
-
-  // Read old items (if sheet exists)
-  let oldItems = [];
-  if (oldItemsSheet && oldItemsSheet.getLastRow() > 1) {
-    const itemsData = oldItemsSheet.getDataRange().getValues();
-    const itemsHeaders = itemsData[0];
-    for (let i = 1; i < itemsData.length; i++) {
-      const row = itemsData[i];
-      oldItems.push({
-        OrderID: row[0] || "",
-        ItemName: row[1] || "",
-        Quantity: row[2] || 0,
-        Unit: row[3] || "pcs",
-        Notes: row[4] || ""
+  // 1. Read items first (before we modify anything)
+  const itemData = {};
+  if (itemsSheet && itemsSheet.getLastRow() > 1) {
+    const iRows = itemsSheet.getDataRange().getValues();
+    for (let i = 1; i < iRows.length; i++) {
+      const oid = String(iRows[i][0]);
+      if (!itemData[oid]) itemData[oid] = [];
+      itemData[oid].push({
+        ItemName: String(iRows[i][1] || ""),
+        Quantity: Number(iRows[i][2]) || 0,
+        Unit: String(iRows[i][3] || "pcs"),
+        Notes: String(iRows[i][4] || "")
       });
     }
   }
 
-  // Group items by OrderID
-  const itemMap = {};
-  oldItems.forEach(it => {
-    if (!itemMap[it.OrderID]) itemMap[it.OrderID] = [];
-    itemMap[it.OrderID].push({
-      ItemName: it.ItemName,
-      Quantity: parseInt(it.Quantity) || 0,
-      Unit: it.Unit || "pcs",
-      Notes: it.Notes
-    });
-  });
+  // 2. Read orders
+  const oLastRow = ordersSheet.getLastRow();
+  const oLastCol = ordersSheet.getLastColumn();
+  if (oLastRow < 2) return { success: false, message: "Tidak ada data order" };
 
-  // Build new rows with Items JSON
-  const newRows = oldOrders.map(o => [
-    o.OrderID,
-    o.Date,
-    o.RequesterName,
-    o.Department,
-    o.Purpose,
-    o.Notes,
-    o.Status,
-    o.CreatedAt,
-    o.CompletedAt,
-    JSON.stringify(itemMap[o.OrderID] || [])
-  ]);
+  const oData = ordersSheet.getRange(1, 1, oLastRow, oLastCol).getValues();
+  const newRows = [];
 
-  // Clear everything and rewrite
-  oldOrdersSheet.clearContents();
+  for (let i = 1; i < oData.length; i++) {
+    const r = oData[i];
+    const oid = String(r[0] || "");
+    const itemsJson = JSON.stringify(itemData[oid] || []);
+    newRows.push([
+      oid,                           // OrderID
+      r[1] || "",                    // Date
+      r[2] || "",                    // RequesterName
+      r[3] || "",                    // Department
+      r[4] || "",                    // Purpose
+      r[5] || "",                    // Notes
+      r[6] || "Pending",             // Status
+      r[7] || "",                    // CreatedAt
+      r[8] || "",                    // CompletedAt
+      itemsJson                      // Items (JSON)
+    ]);
+  }
 
-  // Write new header
-  oldOrdersSheet.getRange(1, 1, 1, 10).setValues([[
+  // 3. Clear and rewrite
+  ordersSheet.clearContents();
+  ordersSheet.getRange(1, 1, 1, 10).setValues([[
     "OrderID", "Date", "RequesterName", "Department",
     "Purpose", "Notes", "Status", "CreatedAt", "CompletedAt", "Items"
   ]]);
-
-  // Write data
   if (newRows.length > 0) {
-    oldOrdersSheet.getRange(2, 1, newRows.length, 10).setValues(newRows);
+    ordersSheet.getRange(2, 1, newRows.length, 10).setValues(newRows);
   }
 
-  // Delete old items sheet
-  if (oldItemsSheet) {
-    ss.deleteSheet(oldItemsSheet);
+  // 4. Delete items sheet
+  if (itemsSheet) {
+    try { ss.deleteSheet(itemsSheet); } catch(e) {}
   }
 
-  CacheService.getScriptCache().remove("dashboard_stats");
-
-  return {
-    success: true,
-    message: "Migrated " + newRows.length + " orders. Items merged into Items column."
-  };
+  return { success: true, message: "Berhasil migrate " + newRows.length + " orders" };
 }
 
 // ========================================

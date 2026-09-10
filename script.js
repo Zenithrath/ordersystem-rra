@@ -988,7 +988,7 @@ async function generateExcelFromData(orders) {
   const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   const dayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 
-  const WIDTHS = [4, 22, 9, 33, 53, 6, 7, 5, 6, 8, 9];
+  const WIDTHS = [4, 22, 9, 33, 53, 6, 7, 5, 6, 14, 9];
 
   const whiteFill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFFF" } };
   const thinBorder = {

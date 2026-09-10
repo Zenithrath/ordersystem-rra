@@ -23,6 +23,7 @@ function doGet(e) {
       case "deleteOrder": result = deleteOrder(e.parameter.id); break;
       case "exportExcel": result = exportExcel(e.parameter); break;
       case "migrateData": result = migrateData(); break;
+      case "generateSampleData": result = generateSampleData(); break;
       default: result = { success: false, message: "Unknown action" };
     }
   } catch (err) {
@@ -447,4 +448,91 @@ function exportExcel(params) {
     total: orders.length,
     filename: "Work_Orders_" + Utilities.formatDate(new Date(), "Asia/Jakarta", "yyyyMMdd_HHmmss")
   };
+}
+
+// ========================================
+// Sample Data Generator (run once)
+// ========================================
+
+function generateSampleData() {
+  const sheet = getSheet(SHEET_ORDERS);
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) return { success: false, message: "Sheet sudah ada data. Hapus dulu atau migrate dulu." };
+
+  const names = ["Budi Santoso", "Andi Pratama", "Dewi Lestari", "Rizki Ramadhan", "Siti Nurhaliza", "Ahmad Fauzi", "Maya Putri", "Doni Kurniawan", "Rina Wati", "Hendra Wijaya", "Lisa Anggraeni", "Fajar Nugroho", "Anisa Rahmawati", "Tommy Prasetyo", "Sari Dewi", "Bayu Firmansyah", "Nina Agustin", "Rudi Hermawan", "Lia Marlina", "Yoga Saputra"];
+  const depts = ["Engineering", "Project Management", "Procurement", "Operations", "Finance", "HR & Admin", "IT", "Marketing", "Logistics", "Other"];
+  const statuses = ["Pending", "In Progress", "Completed", "Cancelled"];
+  const statusWeights = [20, 15, 50, 15];
+  const purposes = ["Project Alpha", "Maintenance Q3", "Office Renovation", "Server Upgrade", "Event Preparation", "Inventory Restock", "Safety Equipment", "Lab Supplies", "Field Work", "Client Delivery"];
+  const itemPool = [
+    { name: "RAM DDR4 8GB", unit: "pcs", notes: ["Merk Samsung", "Merk Kingston", "Merk Corsair", ""] },
+    { name: "Kabel NYM 2x2.5", unit: "meter", notes: ["Standar SNI", "Anti api", ""] },
+    { name: "Monitor LG 24 inch", unit: "unit", notes: ["Model 24MK430", "Full HD", ""] },
+    { name: "Keyboard Mechanical", unit: "pcs", notes: ["Switch Blue", "RGB", ""] },
+    { name: "Mouse Wireless", unit: "pcs", notes: ["Logitech", "Ergonomis", ""] },
+    { name: "Printer Tinta Canon", unit: "pack", notes: ["Warna hitam", "Warna color", ""] },
+    { name: "Baterai AA", unit: "pack", notes: ["Energizer", "Alkaline", ""] },
+    { name: "Tinta Printer Epson", unit: "botol", notes: ["Black", "Color set", ""] },
+    { name: "Amplas 120", unit: "pack", notes: ["Ukuran A4", ""] },
+    { name: "Baut M8", unit: "pack", notes: ["Panjang 3cm", "Stainless", ""] },
+    { name: "Cat Tembok", unit: "kaleng", notes: ["Putih 5kg", "Abu-abu 5kg", "Biru 2.5kg", ""] },
+    { name: "Pipa PVC 2 inch", unit: "batang", notes: ["Standar", ""] },
+    { name: "Sepatu Safety", unit: "pcs", notes: ["SNI", "Ukuran 42", "Ukuran 40", ""] },
+    { name: "Helm Proyek", unit: "pcs", notes: ["Kuning", "Putih", "Biru", ""] },
+    { name: "Sarung Tangan", unit: "pcs", notes: ["Karet", "Kain", ""] },
+    { name: "Lem Aica Aibon", unit: "pack", notes: ["Ukuran 100g", ""] },
+    { name: "Suku Cadang AC", unit: "set", notes: ["Filter", "Compressor", ""] },
+    { name: "Software License", unit: "set", notes: ["Windows 11 Pro", "Office 365", "AutoCAD", ""] },
+    { name: "USB Drive 32GB", unit: "pcs", notes: ["SanDisk", "Kingston", ""] },
+    { name: "Headset Gaming", unit: "pcs", notes: ["Noise cancelling", ""] }
+  ];
+
+  const rows = [];
+  let orderNum = 0;
+
+  // Generate orders across 6 months (Apr - Sep 2026)
+  for (let month = 3; month <= 8; month++) {
+    const ordersPerMonth = 30 + Math.floor(Math.random() * 15);
+    for (let j = 0; j < ordersPerMonth; j++) {
+      orderNum++;
+      const year = 2026;
+      const day = 1 + Math.floor(Math.random() * 28);
+      const dateStr = year + "-" + String(month + 1).padStart(2, "0") + "-" + String(day).padStart(2, "0");
+      const orderId = "WO-" + year + String(month + 1).padStart(2, "0") + String(day).padStart(2, "0") + "-" + String(orderNum).padStart(3, "0");
+
+      const name = names[Math.floor(Math.random() * names.length)];
+      const dept = depts[Math.floor(Math.random() * depts.length)];
+      const purpose = purposes[Math.floor(Math.random() * purposes.length)];
+
+      // Weighted status
+      let statusRand = Math.random() * 100;
+      let status = "Completed";
+      if (statusRand < statusWeights[0]) status = "Pending";
+      else if (statusRand < statusWeights[0] + statusWeights[1]) status = "In Progress";
+      else if (statusRand < statusWeights[0] + statusWeights[1] + statusWeights[2]) status = "Completed";
+      else status = "Cancelled";
+
+      const itemCount = 1 + Math.floor(Math.random() * 3);
+      const usedItems = new Set();
+      for (let k = 0; k < itemCount; k++) {
+        let itemIdx;
+        do { itemIdx = Math.floor(Math.random() * itemPool.length); } while (usedItems.has(itemIdx) && usedItems.size < itemPool.length);
+        usedItems.add(itemIdx);
+        const item = itemPool[itemIdx];
+        const qty = 1 + Math.floor(Math.random() * 20);
+        const note = item.notes[Math.floor(Math.random() * item.notes.length)];
+
+        rows.push([
+          orderId, dateStr, name, dept, purpose, "", status,
+          item.name, qty, item.unit, note
+        ]);
+      }
+    }
+  }
+
+  if (rows.length > 0) {
+    sheet.getRange(2, 1, rows.length, COL_COUNT).setValues(rows);
+  }
+  CacheService.getScriptCache().remove("dashboard_stats");
+  return { success: true, message: "Berhasil generate " + rows.length + " baris (" + orderNum + " orders)" };
 }

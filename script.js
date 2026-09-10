@@ -880,7 +880,17 @@ function exportExcel() {
 
   ApiService.exportExcel(filters).then(res => {
     if (res.success && res.data && res.data.length > 0) {
-      generateExcelFromData(res.data);
+      const mapped = res.data.map(o => ({
+        OrderID: o["Order ID"] || o.OrderID || "",
+        Date: o.Date || "",
+        RequesterName: o.Requester || o.RequesterName || "",
+        Department: o.Department || "",
+        Purpose: o.Purpose || "",
+        ItemNames: o.Items || o.ItemNames || "",
+        Status: o.Status || "",
+        Notes: o.Notes || ""
+      }));
+      generateExcelFromData(mapped);
     } else {
       showToast("No data to export", "info");
     }

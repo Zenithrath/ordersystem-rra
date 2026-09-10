@@ -973,18 +973,14 @@ function generateExcelFromData(orders) {
       header: 0.1,
       footer: 0.1,
     },
-    properties: { defaultRowHeight: 20 },
   });
 
-  // Hide gridlines
-  ws.views = [{ state: "frozen", ySplit: 6 }];
+  ws.views = [{ state: "frozen", ySplit: 7 }];
 
   // =========================================================
   // CONFIG
   // =========================================================
 
-  const COMPANY_NAME = "PT.RRA TEKNOJAYA PERKASA";
-  const TITLE = "REKAP FORM REQUISITION";
   const now = new Date();
   const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   const dayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
@@ -992,184 +988,221 @@ function generateExcelFromData(orders) {
   const dayNum = now.getDate();
   const monthName = months[now.getMonth()];
   const dayName = dayNames[now.getDay()];
-  const formattedDate = `${dayName}, ${monthName} ${String(dayNum).padStart(2, "0")}, ${year}`;
+  const formattedDate = `${dayName}, ${String(dayNum).padStart(2, "0")} ${monthName} ${year}`;
 
   // =========================================================
-  // COLUMN WIDTHS
+  // COLUMN WIDTHS (12 columns A-L)
   // =========================================================
 
   ws.columns = [
-    { width: 5 },   // A: NO
-    { width: 20 },  // B: USER
-    { width: 14 },  // C: DEP
-    { width: 34 },  // D: DESCRIPTION
-    { width: 48 },  // E: SPECIFICATION
-    { width: 9 },   // F: ORDER QTY
-    { width: 9 },   // G: ORDER UOM
-    { width: 9 },   // H: SALDO QTY
-    { width: 9 },   // I: SALDO UOM
-    { width: 18 },  // J: NO. PR
+    { width: 4 },    // A: NO
+    { width: 22 },   // B: USER
+    { width: 9 },    // C: DEP
+    { width: 33 },   // D: DESCRIPTION
+    { width: 53 },   // E: SPECIFICATION
+    { width: 6 },    // F: ORDER QTY
+    { width: 7 },    // G: ORDER UOM
+    { width: 5 },    // H: SALDO QTY
+    { width: 6 },    // I: SALDO UOM
+    { width: 8 },    // J: NO. PR
+    { width: 9 },    // K: CLEAR
+    { width: 8 },    // L: (extra)
   ];
 
   // =========================================================
-  // WHITE BACKGROUND - fill all cells used
+  // STYLES
   // =========================================================
 
   const whiteFill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFFF" } };
-  const noBorder = {};
-
-  function setWhiteBg(row, colCount) {
-    for (let c = 1; c <= colCount; c++) {
-      const cell = row.getCell(c);
-      cell.fill = whiteFill;
-      cell.font = cell.font || {};
-      cell.font.name = "Arial";
-      cell.font.size = 10;
-      cell.font.color = { argb: "FF000000" };
-      cell.border = noBorder;
-    }
-  }
-
-  // =========================================================
-  // ROW 1: empty spacer
-  // =========================================================
-
-  const row1 = ws.getRow(1);
-  row1.height = 12;
-  setWhiteBg(row1, 10);
-
-  // =========================================================
-  // ROW 2: Company name (left) — no border
-  // =========================================================
-
-  const row2 = ws.getRow(2);
-  row2.height = 24;
-  setWhiteBg(row2, 10);
-  row2.getCell(1).value = COMPANY_NAME;
-  row2.getCell(1).font = { name: "Arial", size: 12, bold: true, color: { argb: "FF111111" } };
-  row2.getCell(1).alignment = { horizontal: "left", vertical: "center" };
-
-  // =========================================================
-  // ROW 3: Title (left) + TAHUN label + value (right)
-  // =========================================================
-
-  const row3 = ws.getRow(3);
-  row3.height = 28;
-  setWhiteBg(row3, 10);
-  row3.getCell(1).value = TITLE;
-  row3.getCell(1).font = { name: "Arial", size: 15, bold: true, color: { argb: "FF111111" } };
-  row3.getCell(1).alignment = { horizontal: "left", vertical: "center" };
-
-  // TAHUN label + value
-  ws.mergeCells("H3:I3");
-  row3.getCell(8).value = "TAHUN";
-  row3.getCell(8).font = { name: "Arial", size: 9, bold: true, color: { argb: "FF555555" } };
-  row3.getCell(8).alignment = { horizontal: "right", vertical: "center" };
-  row3.getCell(8).fill = whiteFill;
-
-  row3.getCell(10).value = year;
-  row3.getCell(10).font = { name: "Arial", size: 10, bold: true, color: { argb: "FF111111" } };
-  row3.getCell(10).alignment = { horizontal: "right", vertical: "center" };
-  row3.getCell(10).fill = whiteFill;
-
-  // =========================================================
-  // ROW 4: Date (left) + TANGGAL label + value (right)
-  // =========================================================
-
-  const row4 = ws.getRow(4);
-  row4.height = 20;
-  setWhiteBg(row4, 10);
-  row4.getCell(1).value = formattedDate;
-  row4.getCell(1).font = { name: "Arial", size: 9, color: { argb: "FF555555" } };
-  row4.getCell(1).alignment = { horizontal: "left", vertical: "center" };
-
-  // TANGGAL label + value
-  ws.mergeCells("H4:I4");
-  row4.getCell(8).value = "TANGGAL";
-  row4.getCell(8).font = { name: "Arial", size: 9, bold: true, color: { argb: "FF555555" } };
-  row4.getCell(8).alignment = { horizontal: "right", vertical: "center" };
-  row4.getCell(8).fill = whiteFill;
-
-  row4.getCell(10).value = dayNum;
-  row4.getCell(10).font = { name: "Arial", size: 10, bold: true, color: { argb: "FF111111" } };
-  row4.getCell(10).alignment = { horizontal: "right", vertical: "center" };
-  row4.getCell(10).fill = whiteFill;
-
-  // =========================================================
-  // ROW 5-6: TABLE HEADERS (with merges)
-  // =========================================================
-
-  const thinBlack = {
+  const thinBorder = {
     top: { style: "thin", color: { argb: "FF000000" } },
     bottom: { style: "thin", color: { argb: "FF000000" } },
     left: { style: "thin", color: { argb: "FF000000" } },
     right: { style: "thin", color: { argb: "FF000000" } },
   };
+  const thickRightBorder = {
+    top: { style: "thin", color: { argb: "FF000000" } },
+    bottom: { style: "thin", color: { argb: "FF000000" } },
+    left: { style: "thin", color: { argb: "FF000000" } },
+    right: { style: "medium", color: { argb: "FF000000" } },
+  };
+  const noBorder = {};
+  const bottomBorder2px = {
+    bottom: { style: "medium", color: { argb: "FF000000" } },
+  };
+  const bottomBorder1px = {
+    bottom: { style: "thin", color: { argb: "FF000000" } },
+  };
+  const valueBorder = {
+    right: { style: "thin", color: { argb: "FF000000" } },
+    bottom: { style: "thin", color: { argb: "FF000000" } },
+  };
 
-  const headerFont = { name: "Arial", size: 9, bold: true, color: { argb: "FF000000" } };
-  const headerAlign = { horizontal: "center", vertical: "center", wrapText: true };
-
-  // Merge header cells vertically (row 5-6)
-  ws.mergeCells("A5:A6"); // NO
-  ws.mergeCells("B5:B6"); // USER
-  ws.mergeCells("C5:C6"); // DEP
-  ws.mergeCells("D5:D6"); // DESCRIPTION
-  ws.mergeCells("E5:E6"); // SPECIFICATION
-  ws.mergeCells("J5:J6"); // NO. PR
-
-  // Merge ORDER horizontally (F5:G5)
-  ws.mergeCells("F5:G5");
-  // Merge SALDO horizontally (H5:I5)
-  ws.mergeCells("H5:I5");
-
-  // Row 5 values
-  const r5 = ws.getRow(5);
-  r5.height = 25;
-  r5.getCell(1).value = "NO";
-  r5.getCell(2).value = "USER";
-  r5.getCell(3).value = "DEP";
-  r5.getCell(4).value = "DESCRIPTION";
-  r5.getCell(5).value = "SPECIFICATION";
-  r5.getCell(6).value = "ORDER";
-  r5.getCell(8).value = "SALDO";
-  r5.getCell(10).value = "NO. PR";
-
-  // Row 6 sub-headers
-  const r6 = ws.getRow(6);
-  r6.height = 22;
-  r6.getCell(6).value = "QTY";
-  r6.getCell(7).value = "UOM";
-  r6.getCell(8).value = "QTY";
-  r6.getCell(9).value = "UOM";
-
-  // Apply header style to rows 5-6
-  [r5, r6].forEach(row => {
-    for (let c = 1; c <= 10; c++) {
+  function fillWhite(row, colCount) {
+    for (let c = 1; c <= colCount; c++) {
       const cell = row.getCell(c);
       cell.fill = whiteFill;
+    }
+  }
+
+  // =========================================================
+  // ROW 1: Logo (image positioned absolutely)
+  // =========================================================
+
+  const row1 = ws.getRow(1);
+  row1.height = 20;
+  fillWhite(row1, 12);
+
+  if (typeof LOGO_BASE64 !== "undefined" && LOGO_BASE64) {
+    const imgId = wb.addImage({ base64: LOGO_BASE64, extension: "png" });
+    ws.addImage(imgId, {
+      tl: { col: 0, row: 0.3 },
+      ext: { width: 228, height: 40 },
+    });
+  }
+
+  // =========================================================
+  // ROW 2: Title "REKAP FORM REQUISITION" (merged C2:G2)
+  // =========================================================
+
+  ws.mergeCells("C2:G2");
+  const row2 = ws.getRow(2);
+  row2.height = 20;
+  fillWhite(row2, 12);
+  row2.getCell(3).value = "REKAP FORM REQUISITION";
+  row2.getCell(3).font = { name: "Calibri", size: 14, bold: true, color: { argb: "FF000000" } };
+  row2.getCell(3).alignment = { horizontal: "center", vertical: "middle" };
+
+  // =========================================================
+  // ROW 3: TAHUN + value (with border)
+  // =========================================================
+
+  const row3 = ws.getRow(3);
+  row3.height = 21;
+  fillWhite(row3, 12);
+  row3.getCell(7).value = "TAHUN";
+  row3.getCell(7).font = { name: "Calibri", size: 10, color: { argb: "FF000000" } };
+  row3.getCell(7).alignment = { horizontal: "right", vertical: "middle" };
+  row3.getCell(9).value = year;
+  row3.getCell(9).font = { name: "Calibri", size: 10, bold: true, color: { argb: "FF000000" } };
+  row3.getCell(9).alignment = { horizontal: "center", vertical: "middle" };
+  ws.mergeCells("I3:K3");
+  row3.getCell(9).border = valueBorder;
+
+  // =========================================================
+  // ROW 4: TANGGAL + day + month (with border)
+  // =========================================================
+
+  const row4 = ws.getRow(4);
+  row4.height = 21;
+  fillWhite(row4, 12);
+  ws.mergeCells("G4:H4");
+  row4.getCell(7).value = "TANGGAL";
+  row4.getCell(7).font = { name: "Calibri", size: 10, color: { argb: "FF000000" } };
+  row4.getCell(7).alignment = { horizontal: "right", vertical: "middle" };
+  row4.getCell(9).value = dayNum;
+  row4.getCell(9).font = { name: "Calibri", size: 10, bold: true, color: { argb: "FF000000" } };
+  row4.getCell(9).alignment = { horizontal: "center", vertical: "middle" };
+  ws.mergeCells("J4:K4");
+  row4.getCell(10).value = monthName;
+  row4.getCell(10).font = { name: "Calibri", size: 10, bold: true, color: { argb: "FF000000" } };
+  row4.getCell(10).alignment = { horizontal: "center", vertical: "middle" };
+  row4.getCell(10).border = valueBorder;
+
+  // =========================================================
+  // ROW 5: Date string (merged A5:D5, bottom border 2px)
+  // =========================================================
+
+  ws.mergeCells("A5:D5");
+  const row5 = ws.getRow(5);
+  row5.height = 20;
+  fillWhite(row5, 12);
+  row5.getCell(1).value = formattedDate;
+  row5.getCell(1).font = { name: "Calibri", size: 10, color: { argb: "FF000000" } };
+  row5.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
+  row5.getCell(1).border = bottomBorder2px;
+
+  // =========================================================
+  // ROWS 6-7: TABLE HEADERS
+  // =========================================================
+
+  // Merge vertically (rowspan 2)
+  ws.mergeCells("A6:A7"); // NO
+  ws.mergeCells("B6:B7"); // USER
+  ws.mergeCells("C6:C7"); // DEP
+  ws.mergeCells("D6:D7"); // DESCRIPTION
+  ws.mergeCells("E6:E7"); // SPECIFICATION
+  ws.mergeCells("J6:J7"); // NO. PR
+  ws.mergeCells("K6:K7"); // CLEAR
+
+  // Merge horizontally (colspan 2)
+  ws.mergeCells("F6:G6"); // ORDER
+  ws.mergeCells("H6:I6"); // SALDO
+
+  const r6 = ws.getRow(6);
+  r6.height = 22;
+  fillWhite(r6, 12);
+  r6.getCell(1).value = "NO";
+  r6.getCell(2).value = "USER";
+  r6.getCell(3).value = "DEP";
+  r6.getCell(4).value = "DESCRIPTION";
+  r6.getCell(5).value = "SPECIFICATION";
+  r6.getCell(6).value = "ORDER";
+  r6.getCell(8).value = "SALDO";
+  r6.getCell(10).value = "NO. PR";
+  r6.getCell(11).value = "CLEAR";
+
+  const r7 = ws.getRow(7);
+  r7.height = 20;
+  fillWhite(r7, 12);
+  r7.getCell(6).value = "QTY";
+  r7.getCell(7).value = "UOM";
+  r7.getCell(8).value = "QTY";
+  r7.getCell(9).value = "UOM";
+
+  // Style header rows
+  const headerFont = { name: "Calibri", size: 10, bold: true, color: { argb: "FF000000" } };
+  const headerAlign = { horizontal: "center", vertical: "middle", wrapText: true };
+
+  [r6, r7].forEach(row => {
+    for (let c = 1; c <= 12; c++) {
+      const cell = row.getCell(c);
       cell.font = headerFont;
       cell.alignment = headerAlign;
-      cell.border = thinBlack;
+      cell.border = thinBorder;
     }
   });
+
+  // ORDER/SALDO: thicker right border
+  r6.getCell(6).border = thickRightBorder;
+  r6.getCell(7).border = thickRightBorder;
+  r6.getCell(8).border = thickRightBorder;
+
+  // Bottom border on header row 6
+  for (let c = 1; c <= 12; c++) {
+    r6.getCell(c).border = {
+      ...r6.getCell(c).border,
+      bottom: { style: "thin", color: { argb: "FF000000" } },
+    };
+  }
 
   // =========================================================
   // DATA ROWS
   // =========================================================
 
-  let rowNum = 7;
+  let rowNum = 8;
   let itemNumber = 1;
-
-  const bodyFont = { name: "Arial", size: 9, color: { argb: "FF000000" } };
-  const bodyAlignLeft = { horizontal: "left", vertical: "center", wrapText: true };
-  const bodyAlignCenter = { horizontal: "center", vertical: "center", wrapText: true };
+  const bodyFont = { name: "Calibri", size: 10, color: { argb: "FF000000" } };
+  const bodyAlignLeft = { horizontal: "left", vertical: "middle", wrapText: true };
+  const bodyAlignCenter = { horizontal: "center", vertical: "middle", wrapText: true };
 
   orders.forEach((order) => {
     const items = Array.isArray(order.Items) ? order.Items : Array.isArray(order.items) ? order.items : [];
 
     if (items.length === 0) {
       const row = ws.getRow(rowNum);
-      row.height = 25;
+      row.height = 20;
+      fillWhite(row, 12);
       row.getCell(1).value = itemNumber++;
       row.getCell(2).value = order.User || order.user || "";
       row.getCell(3).value = order.Department || order.department || "";
@@ -1181,20 +1214,24 @@ function generateExcelFromData(orders) {
       row.getCell(9).value = order.SaldoUom || order.saldoUom || order.Unit || "PCS";
       row.getCell(10).value = order.NoPR || order.noPR || order.OrderID || order.orderID || "";
 
-      for (let c = 1; c <= 10; c++) {
+      for (let c = 1; c <= 12; c++) {
         const cell = row.getCell(c);
-        cell.fill = whiteFill;
         cell.font = bodyFont;
         cell.alignment = [1, 6, 7, 8, 9, 10].includes(c) ? bodyAlignCenter : bodyAlignLeft;
-        cell.border = thinBlack;
+        cell.border = thinBorder;
       }
+      // ORDER/SALDO right border thicker
+      row.getCell(6).border = thickRightBorder;
+      row.getCell(7).border = thickRightBorder;
+      row.getCell(8).border = thickRightBorder;
       rowNum++;
       return;
     }
 
     items.forEach((item) => {
       const row = ws.getRow(rowNum);
-      row.height = 25;
+      row.height = 20;
+      fillWhite(row, 12);
 
       row.getCell(1).value = itemNumber++;
       row.getCell(2).value = order.User || order.user || item.User || item.user || "";
@@ -1207,45 +1244,35 @@ function generateExcelFromData(orders) {
       row.getCell(9).value = item.SaldoUom || item.saldoUom || item.Unit || item.unit || "PCS";
       row.getCell(10).value = order.NoPR || order.noPR || order.OrderID || order.orderID || "";
 
-      for (let c = 1; c <= 10; c++) {
+      for (let c = 1; c <= 12; c++) {
         const cell = row.getCell(c);
-        cell.fill = whiteFill;
         cell.font = bodyFont;
         cell.alignment = [1, 6, 7, 8, 9, 10].includes(c) ? bodyAlignCenter : bodyAlignLeft;
-        cell.border = thinBlack;
+        cell.border = thinBorder;
       }
+      row.getCell(6).border = thickRightBorder;
+      row.getCell(7).border = thickRightBorder;
+      row.getCell(8).border = thickRightBorder;
       rowNum++;
     });
   });
 
   // =========================================================
-  // EMPTY ROWS (signature area) — white, no border
+  // EMPTY ROWS (signature area)
   // =========================================================
 
   for (let i = 0; i < 5; i++) {
     const row = ws.getRow(rowNum);
     row.height = 20;
-    setWhiteBg(row, 10);
+    fillWhite(row, 12);
     rowNum++;
-  }
-
-  // =========================================================
-  // LOGO IMAGE (top-left)
-  // =========================================================
-
-  if (typeof LOGO_BASE64 !== "undefined" && LOGO_BASE64) {
-    const imgId = wb.addImage({ base64: LOGO_BASE64, extension: "png" });
-    ws.addImage(imgId, {
-      tl: { col: 0, row: 0 },
-      br: { col: 3, row: 2 },
-    });
   }
 
   // =========================================================
   // PRINT AREA
   // =========================================================
 
-  ws.pageSetup.printArea = `A1:J${rowNum - 1}`;
+  ws.pageSetup.printArea = `A1:L${rowNum - 1}`;
 
   // =========================================================
   // EXPORT

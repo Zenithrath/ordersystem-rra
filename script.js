@@ -14,17 +14,14 @@ let allOrdersTotalPages = 0;
 let currentOrder = null;
 let editingOrderId = null;
 let isLoadingOrders = false;
-let pollTimer = null;
 
 const DEBOUNCE_MS = 350;
-const POLL_INTERVAL = 25000;
 
 // --- Init ---
 document.addEventListener("DOMContentLoaded", () => {
   loadDashboard();
   loadFilters();
   addItemRow();
-  startPolling();
 });
 
 // --- Navigation ---
@@ -315,6 +312,12 @@ function clearFilters() {
   loadOrders();
 }
 
+function refreshOrders() {
+  ApiService.invalidateOrders();
+  loadOrders();
+  showToast("Refreshing...", "info");
+}
+
 function loadFilters() {
   const deptSelect = document.getElementById("filter-department");
   CONFIG.DEPARTMENTS.forEach(d => {
@@ -332,25 +335,6 @@ function loadFilters() {
     opt.textContent = d;
     formDept.appendChild(opt);
   });
-}
-
-// ========================================
-// Auto-Refresh Polling
-// ========================================
-
-function startPolling() {
-  stopPolling();
-  pollTimer = setInterval(() => {
-    const ordersPage = document.getElementById("page-orders");
-    if (!ordersPage.classList.contains("hidden") && !isLoadingOrders) {
-      ApiService.invalidateOrders();
-      loadOrders();
-    }
-  }, POLL_INTERVAL);
-}
-
-function stopPolling() {
-  if (pollTimer) clearInterval(pollTimer);
 }
 
 // ========================================

@@ -5,7 +5,7 @@
 
 const SHEET_ORDERS = "ORDERS";
 const SHEET_ITEMS = "ORDER_ITEMS";
-const CACHE_TTL = 60; // seconds
+const CACHE_TTL = 180; // 3 minutes
 
 // ========================================
 // HTTP Handlers
@@ -91,8 +91,11 @@ function generateOrderID() {
   let maxNum = 0;
 
   if (lastRow > 1) {
-    const ids = sheet.getRange(1, 1, lastRow, 1).getValues();
-    for (let i = 1; i < ids.length; i++) {
+    // Only read last 100 rows for ID generation (orders won't exceed this daily)
+    const readStart = Math.max(2, lastRow - 99);
+    const readCount = lastRow - readStart + 1;
+    const ids = sheet.getRange(readStart, 1, readCount, 1).getValues();
+    for (let i = 0; i < ids.length; i++) {
       const orderId = ids[i][0];
       if (orderId && typeof orderId === "string" && orderId.startsWith(prefix)) {
         const num = parseInt(orderId.split("-")[2], 10);
@@ -136,6 +139,19 @@ function readAllData() {
 }
 
 function buildOrderMap(orders, items) {
+  const itemCounts = {};
+  items.forEach(it => {
+    itemCounts[it.OrderID] = (itemCounts[it.OrderID] || 0) + 1;
+  });
+
+  return orders.map(order => ({
+    ...order,
+    ItemCount: itemCounts[order.OrderID] || 0
+  }));
+}
+
+// Build order map WITH full items (for detail view)
+function buildOrderMapWithItems(orders, items) {
   const itemMap = {};
   items.forEach(it => {
     if (!itemMap[it.OrderID]) itemMap[it.OrderID] = [];
@@ -155,15 +171,23 @@ function buildOrderMap(orders, items) {
 
 function getOrders(params) {
   const { orders, items } = readAllData();
-  let enriched = buildOrderMap(orders, items);
+  let enriched = buildOrderMap(orders, items); // lightweight: ItemCount only, no Items array
 
   // Search
   if (params.q) {
     const q = params.q.toLowerCase();
+    // Collect order IDs that have matching item names
+    const matchingItemIds = new Set();
+    items.forEach(it => {
+      if (it.ItemName && it.ItemName.toLowerCase().includes(q)) {
+        matchingItemIds.add(it.OrderID);
+      }
+    });
+
     enriched = enriched.filter(o =>
       (o.OrderID && o.OrderID.toLowerCase().includes(q)) ||
       (o.RequesterName && o.RequesterName.toLowerCase().includes(q)) ||
-      (o.Items && o.Items.some(it => it.ItemName && it.ItemName.toLowerCase().includes(q)))
+      matchingItemIds.has(o.OrderID)
     );
   }
 
@@ -227,7 +251,7 @@ function getOrderDetail(orderId) {
   if (!order) return { success: false, message: "Order not found" };
 
   const orderItems = items.filter(it => it.OrderID === orderId);
-  return { success: true, data: { ...order, Items: orderItems } };
+  return { success: true, data: { ...order, Items: orderItems, ItemCount: orderItems.length } };
 }
 
 function getDashboardStats() {
@@ -422,15 +446,19 @@ function deleteOrder(orderId) {
 
 function exportExcel(params) {
   const { orders, items } = readAllData();
-  let filtered = buildOrderMap(orders, items);
+  let filtered = buildOrderMapWithItems(orders, items);
 
   // Apply same filters as getOrders
   if (params.q) {
     const q = params.q.toLowerCase();
+    const matchingItemIds = new Set();
+    items.forEach(it => {
+      if (it.ItemName && it.ItemName.toLowerCase().includes(q)) matchingItemIds.add(it.OrderID);
+    });
     filtered = filtered.filter(o =>
       (o.OrderID && o.OrderID.toLowerCase().includes(q)) ||
       (o.RequesterName && o.RequesterName.toLowerCase().includes(q)) ||
-      (o.Items && o.Items.some(it => it.ItemName && it.ItemName.toLowerCase().includes(q)))
+      matchingItemIds.has(o.OrderID)
     );
   }
   if (params.status) filtered = filtered.filter(o => o.Status === params.status);

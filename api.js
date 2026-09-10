@@ -5,7 +5,7 @@
 
 const ApiService = (() => {
   const API_URL = CONFIG.API_URL;
-  const CACHE_TTL = 30000; // 30s client-side cache
+  const CACHE_TTL = 120000; // 2 minutes client-side cache
   const DEDUP_TTL = 5000;  // 5s dedup window
 
   // --- Cache ---

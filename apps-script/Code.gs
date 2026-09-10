@@ -153,7 +153,13 @@ function migrateData() {
 
   if (!ordersSheet) return { success: false, message: "Sheet ORDERS tidak ditemukan" };
 
-  // 1. Read items first (before we modify anything)
+  // Check if already migrated (Items column exists)
+  const headers = ordersSheet.getRange(1, 1, 1, ordersSheet.getLastColumn()).getValues()[0];
+  if (headers.includes("Items")) {
+    return { success: true, message: "Sudah di-migrate, kolom Items sudah ada" };
+  }
+
+  // 1. Read items from old sheet
   const itemData = {};
   if (itemsSheet && itemsSheet.getLastRow() > 1) {
     const iRows = itemsSheet.getDataRange().getValues();
@@ -169,40 +175,19 @@ function migrateData() {
     }
   }
 
-  // 2. Read orders
-  const oLastRow = ordersSheet.getLastRow();
-  const oLastCol = ordersSheet.getLastColumn();
-  if (oLastRow < 2) return { success: false, message: "Tidak ada data order" };
+  // 2. Add Items column header
+  const nextCol = ordersSheet.getLastColumn() + 1;
+  ordersSheet.getRange(1, nextCol).setValue("Items");
 
-  const oData = ordersSheet.getRange(1, 1, oLastRow, oLastCol).getValues();
-  const newRows = [];
-
-  for (let i = 1; i < oData.length; i++) {
-    const r = oData[i];
-    const oid = String(r[0] || "");
-    const itemsJson = JSON.stringify(itemData[oid] || []);
-    newRows.push([
-      oid,                           // OrderID
-      r[1] || "",                    // Date
-      r[2] || "",                    // RequesterName
-      r[3] || "",                    // Department
-      r[4] || "",                    // Purpose
-      r[5] || "",                    // Notes
-      r[6] || "Pending",             // Status
-      r[7] || "",                    // CreatedAt
-      r[8] || "",                    // CompletedAt
-      itemsJson                      // Items (JSON)
-    ]);
-  }
-
-  // 3. Clear and rewrite
-  ordersSheet.clearContents();
-  ordersSheet.getRange(1, 1, 1, 10).setValues([[
-    "OrderID", "Date", "RequesterName", "Department",
-    "Purpose", "Notes", "Status", "CreatedAt", "CompletedAt", "Items"
-  ]]);
-  if (newRows.length > 0) {
-    ordersSheet.getRange(2, 1, newRows.length, 10).setValues(newRows);
+  // 3. Write items JSON to each row
+  const lastRow = ordersSheet.getLastRow();
+  if (lastRow > 1) {
+    const oIds = ordersSheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    for (let i = 0; i < oIds.length; i++) {
+      const oid = String(oIds[i][0]);
+      const json = JSON.stringify(itemData[oid] || []);
+      ordersSheet.getRange(i + 2, nextCol).setValue(json);
+    }
   }
 
   // 4. Delete items sheet
@@ -210,7 +195,7 @@ function migrateData() {
     try { ss.deleteSheet(itemsSheet); } catch(e) {}
   }
 
-  return { success: true, message: "Berhasil migrate " + newRows.length + " orders" };
+  return { success: true, message: "Berhasil migrate " + (lastRow - 1) + " orders" };
 }
 
 // ========================================

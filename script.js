@@ -146,6 +146,7 @@ function showOrdersSkeleton() {
       <td class="px-5 py-4 hidden md:table-cell"><div class="skeleton h-4 w-24 rounded"></div></td>
       <td class="px-5 py-4"><div class="skeleton h-4 w-32 rounded"></div></td>
       <td class="px-5 py-4 text-center"><div class="skeleton h-5 w-16 rounded-full mx-auto"></div></td>
+      <td class="px-5 py-4 hidden lg:table-cell"><div class="skeleton h-4 w-24 rounded"></div></td>
       <td class="px-5 py-4 text-right"><div class="skeleton h-4 w-12 rounded ml-auto"></div></td>
     </tr>
   `,
@@ -222,6 +223,9 @@ function renderOrdersTable() {
       </td>
       <td class="px-5 py-4 text-center cursor-pointer" onclick="openOrderDetail('${o.OrderID}')">
         <span class="badge badge-${statusClass(o.Status)}">${o.Status}</span>
+      </td>
+      <td class="px-5 py-4 hidden lg:table-cell cursor-pointer" onclick="openOrderDetail('${o.OrderID}')">
+        <p class="text-sm text-surface-500 truncate max-w-[150px]" title="${o.Notes || ""}">${o.Notes || "-"}</p>
       </td>
       <td class="px-5 py-4 text-right">
         <button onclick="event.stopPropagation(); openOrderDetail('${o.OrderID}')" class="text-xs font-medium text-primary-500 hover:text-primary-600 transition-colors">

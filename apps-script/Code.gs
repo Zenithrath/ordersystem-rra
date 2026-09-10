@@ -157,7 +157,6 @@ function migrateData() {
   }
 
   // Read all data
-  const lastRow = ordersSheet.getLastRow();
   if (lastRow < 2) return { success: false, message: "Tidak ada data" };
 
   const allData = ordersSheet.getRange(1, 1, lastRow, numCols).getValues();

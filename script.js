@@ -695,6 +695,9 @@ function renderDrawer(order) {
       <button onclick="exportWorkOrderPDF()" class="px-3 py-2 text-xs font-medium text-surface-600 bg-surface-50 border border-surface-200 rounded-xl hover:bg-surface-100 transition-colors ml-auto">
         Export PDF
       </button>
+      <button onclick="exportCurrentOrderExcel()" class="px-3 py-2 text-xs font-medium text-surface-600 bg-surface-50 border border-surface-200 rounded-xl hover:bg-surface-100 transition-colors">
+        Export Excel
+      </button>
       <button onclick="confirmDeleteOrder('${order.OrderID}')" class="px-3 py-2 text-xs font-medium text-red-500 hover:text-red-600 transition-colors">
         Delete
       </button>
@@ -985,7 +988,7 @@ async function generateExcelFromData(orders) {
   const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   const dayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 
-  const WIDTHS = [4, 22, 9, 33, 53, 6, 7, 5, 6, 8, 9, 8];
+  const WIDTHS = [4, 22, 9, 33, 53, 6, 7, 5, 6, 8, 9];
 
   const whiteFill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFFF" } };
   const thinBorder = {
@@ -1079,7 +1082,7 @@ async function generateExcelFromData(orders) {
 
     const row1 = ws.getRow(1);
     row1.height = 20;
-    fillWhite(row1, 12);
+    fillWhite(row1, 11);
     if (logoId !== null) {
       ws.addImage(logoId, {
         tl: { col: 0, row: 0.3 },
@@ -1094,7 +1097,7 @@ async function generateExcelFromData(orders) {
     ws.mergeCells("C2:G2");
     const row2 = ws.getRow(2);
     row2.height = 20;
-    fillWhite(row2, 12);
+    fillWhite(row2, 11);
     row2.getCell(3).value = "REKAP FORM REQUISITION";
     row2.getCell(3).font = { name: "Calibri", size: 14, bold: true, color: { argb: "FF000000" } };
     row2.getCell(3).alignment = { horizontal: "center", vertical: "middle" };
@@ -1105,7 +1108,7 @@ async function generateExcelFromData(orders) {
 
     const row3 = ws.getRow(3);
     row3.height = 21;
-    fillWhite(row3, 12);
+    fillWhite(row3, 11);
     row3.getCell(7).value = "TAHUN";
     row3.getCell(7).font = { name: "Calibri", size: 10, color: { argb: "FF000000" } };
     row3.getCell(7).alignment = { horizontal: "right", vertical: "middle" };
@@ -1121,7 +1124,7 @@ async function generateExcelFromData(orders) {
 
     const row4 = ws.getRow(4);
     row4.height = 21;
-    fillWhite(row4, 12);
+    fillWhite(row4, 11);
     ws.mergeCells("G4:H4");
     row4.getCell(7).value = "TANGGAL";
     row4.getCell(7).font = { name: "Calibri", size: 10, color: { argb: "FF000000" } };
@@ -1143,7 +1146,7 @@ async function generateExcelFromData(orders) {
     ws.mergeCells("A5:D5");
     const row5 = ws.getRow(5);
     row5.height = 20;
-    fillWhite(row5, 12);
+    fillWhite(row5, 11);
     row5.getCell(1).value = formattedDate;
     row5.getCell(1).font = { name: "Calibri", size: 10, color: { argb: "FF000000" } };
     row5.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
@@ -1165,7 +1168,7 @@ async function generateExcelFromData(orders) {
 
     const r6 = ws.getRow(6);
     r6.height = 22;
-    fillWhite(r6, 12);
+    fillWhite(r6, 11);
     r6.getCell(1).value = "NO";
     r6.getCell(2).value = "USER";
     r6.getCell(3).value = "DEP";
@@ -1178,14 +1181,14 @@ async function generateExcelFromData(orders) {
 
     const r7 = ws.getRow(7);
     r7.height = 20;
-    fillWhite(r7, 12);
+    fillWhite(r7, 11);
     r7.getCell(6).value = "QTY";
     r7.getCell(7).value = "UOM";
     r7.getCell(8).value = "QTY";
     r7.getCell(9).value = "UOM";
 
     [r6, r7].forEach((row) => {
-      for (let c = 1; c <= 12; c++) {
+      for (let c = 1; c <= 11; c++) {
         const cell = row.getCell(c);
         cell.font = headerFont;
         cell.alignment = headerAlign;
@@ -1206,7 +1209,7 @@ async function generateExcelFromData(orders) {
     function writeDataRow(item, fallbackUser, fallbackDept) {
       const row = ws.getRow(rowNum);
       row.height = 20;
-      fillWhite(row, 12);
+      fillWhite(row, 11);
       row.getCell(1).value = itemNumber++;
       row.getCell(2).value = item.User || item.user || fallbackUser || "";
       row.getCell(3).value = fallbackDept || item.Department || item.department || "";
@@ -1218,7 +1221,7 @@ async function generateExcelFromData(orders) {
       row.getCell(9).value = item.SaldoUom || item.saldoUom || item.Unit || item.unit || "PCS";
       row.getCell(10).value = order.NoPR || order.noPR || orderId;
       row.getCell(11).value = item.Clear || item.clear ? "V" : "";
-      for (let c = 1; c <= 12; c++) {
+      for (let c = 1; c <= 11; c++) {
         const cell = row.getCell(c);
         cell.font = bodyFont;
         cell.alignment = [1, 6, 7, 8, 9, 10].includes(c) ? bodyAlignCenter : bodyAlignLeft;
@@ -1245,11 +1248,11 @@ async function generateExcelFromData(orders) {
     for (let i = 0; i < 5; i++) {
       const row = ws.getRow(rowNum);
       row.height = 20;
-      fillWhite(row, 12);
+      fillWhite(row, 11);
       rowNum++;
     }
 
-    ws.pageSetup.printArea = `A1:L${rowNum - 1}`;
+    ws.pageSetup.printArea = `A1:K${rowNum - 1}`;
   });
 
   // =========================================================
@@ -1280,6 +1283,14 @@ async function generateExcelFromData(orders) {
 // ========================================
 // PDF Export (Print-friendly)
 // ========================================
+
+function exportCurrentOrderExcel() {
+  if (!currentOrder) return;
+  Promise.resolve(generateExcelFromData([currentOrder])).catch((err) => {
+    console.error("Excel export error:", err);
+    showToast("Export failed: " + (err.message || "Unknown error"), "error");
+  });
+}
 
 function exportWorkOrderPDF() {
   if (!currentOrder) return;

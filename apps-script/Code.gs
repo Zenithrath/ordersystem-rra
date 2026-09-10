@@ -1,11 +1,11 @@
 // ========================================
 // Work Order Management System - Backend
-// Google Apps Script Web App
+// Google Apps Script Web App (Optimized)
 // ========================================
 
 const SHEET_ORDERS = "ORDERS";
 const SHEET_ITEMS = "ORDER_ITEMS";
-const SHEET_MASTER = "MASTER_ITEMS";
+const CACHE_TTL = 60; // seconds
 
 // ========================================
 // HTTP Handlers
@@ -25,12 +25,6 @@ function doGet(e) {
         break;
       case "getDashboardStats":
         result = getDashboardStats();
-        break;
-      case "searchOrders":
-        result = searchOrders(e.parameter.q);
-        break;
-      case "filterOrders":
-        result = filterOrders(e.parameter);
         break;
       case "getDepartments":
         result = getDepartments();
@@ -52,42 +46,8 @@ function doGet(e) {
       case "deleteOrder":
         result = deleteOrder(e.parameter.id);
         break;
-      default:
-        result = { success: false, message: "Unknown action: " + action };
-    }
-  } catch (err) {
-    result = { success: false, message: err.message };
-  }
-
-  return ContentService.createTextOutput(JSON.stringify(result))
-    .setMimeType(ContentService.MimeType.JSON);
-}
-
-function doPost(e) {
-  let result;
-
-  try {
-    const body = JSON.parse(e.postData.contents);
-    const action = body.action;
-
-    switch (action) {
-      case "createOrder":
-        result = createOrder(body);
-        break;
-      case "updateOrder":
-        result = updateOrder(body);
-        break;
-      case "updateOrderStatus":
-        result = updateOrderStatus(body);
-        break;
-      case "deleteOrder":
-        result = deleteOrder(body.id);
-        break;
-      case "addMasterItem":
-        result = addMasterItem(body);
-        break;
-      case "deleteMasterItem":
-        result = deleteMasterItem(body.id);
+      case "exportExcel":
+        result = exportExcel(e.parameter);
         break;
       default:
         result = { success: false, message: "Unknown action: " + action };
@@ -116,28 +76,6 @@ function getSheet(name) {
       ]);
     } else if (name === SHEET_ITEMS) {
       sheet.appendRow(["OrderID", "ItemName", "Quantity", "Unit", "Notes"]);
-    } else if (name === SHEET_MASTER) {
-      sheet.appendRow(["ID", "Name", "Unit", "Category"]);
-      const defaults = [
-        ["Tang Potong", "pcs", "Tools"],
-        ["Gypsum Board", "pcs", "Material"],
-        ["Kabel NYM 2x2.5", "meter", "Electrical"],
-        ["Paku 5cm", "kg", "Hardware"],
-        ["Semen Portland", "bag", "Material"],
-        ["Besi Beton 10mm", "meter", "Material"],
-        ["Cat Tembok 20L", "liter", "Paint"],
-        ["Pipa PVC 2 inch", "meter", "Plumbing"],
-        ["Sekrup Gypsum", "box", "Hardware"],
-        ["Switch Listrik", "pcs", "Electrical"],
-        ["Stop Kontak", "pcs", "Electrical"],
-        ["Lemari Arsip", "unit", "Furniture"],
-        ["Kertas A4", "box", "Office"],
-        ["Tinta Printer", "unit", "Office"],
-        ["Sarung Tangan", "pair", "Safety"]
-      ];
-      defaults.forEach((item, i) => {
-        sheet.appendRow(["MI-" + String(i + 1).padStart(3, "0"), item[0], item[1], item[2]]);
-      });
     }
   }
   return sheet;
@@ -149,37 +87,66 @@ function generateOrderID() {
   const dateStr = Utilities.formatDate(today, "Asia/Jakarta", "yyyyMMdd");
   const prefix = "WO-" + dateStr + "-";
 
-  const data = sheet.getDataRange().getValues();
+  const lastRow = sheet.getLastRow();
   let maxNum = 0;
 
-  for (let i = 1; i < data.length; i++) {
-    const orderId = data[i][0];
-    if (orderId && orderId.startsWith(prefix)) {
-      const num = parseInt(orderId.split("-")[2], 10);
-      if (num > maxNum) maxNum = num;
+  if (lastRow > 1) {
+    const ids = sheet.getRange(1, 1, lastRow, 1).getValues();
+    for (let i = 1; i < ids.length; i++) {
+      const orderId = ids[i][0];
+      if (orderId && typeof orderId === "string" && orderId.startsWith(prefix)) {
+        const num = parseInt(orderId.split("-")[2], 10);
+        if (num > maxNum) maxNum = num;
+      }
     }
   }
 
   return prefix + String(maxNum + 1).padStart(3, "0");
 }
 
-function getDataAsObjects(sheetName) {
-  const sheet = getSheet(sheetName);
-  const data = sheet.getDataRange().getValues();
-  if (data.length < 2) return [];
+// Batch read: reads orders + items once, returns as objects
+function readAllData() {
+  const ordersSheet = getSheet(SHEET_ORDERS);
+  const itemsSheet = getSheet(SHEET_ITEMS);
 
-  const headers = data[0];
-  const rows = [];
+  const ordersRange = ordersSheet.getDataRange();
+  const itemsRange = itemsSheet.getDataRange();
 
-  for (let i = 1; i < data.length; i++) {
+  const ordersValues = ordersRange.getValues();
+  const itemsValues = itemsRange.getValues();
+
+  const ordersHeaders = ordersValues[0];
+  const itemsHeaders = itemsValues[0];
+
+  const orders = [];
+  for (let i = 1; i < ordersValues.length; i++) {
     const obj = {};
-    headers.forEach((h, j) => {
-      obj[h] = data[i][j];
-    });
-    rows.push(obj);
+    ordersHeaders.forEach((h, j) => { obj[h] = ordersValues[i][j]; });
+    orders.push(obj);
   }
 
-  return rows;
+  const items = [];
+  for (let i = 1; i < itemsValues.length; i++) {
+    const obj = {};
+    itemsHeaders.forEach((h, j) => { obj[h] = itemsValues[i][j]; });
+    items.push(obj);
+  }
+
+  return { orders, items };
+}
+
+function buildOrderMap(orders, items) {
+  const itemMap = {};
+  items.forEach(it => {
+    if (!itemMap[it.OrderID]) itemMap[it.OrderID] = [];
+    itemMap[it.OrderID].push(it);
+  });
+
+  return orders.map(order => ({
+    ...order,
+    ItemCount: (itemMap[order.OrderID] || []).length,
+    Items: itemMap[order.OrderID] || []
+  }));
 }
 
 // ========================================
@@ -187,159 +154,142 @@ function getDataAsObjects(sheetName) {
 // ========================================
 
 function getOrders(params) {
-  const orders = getDataAsObjects(SHEET_ORDERS);
-  const items = getDataAsObjects(SHEET_ITEMS);
+  const { orders, items } = readAllData();
+  let enriched = buildOrderMap(orders, items);
 
-  const enriched = orders.map(order => {
-    const orderItems = items.filter(it => it.OrderID === order.OrderID);
-    return {
-      ...order,
-      ItemCount: orderItems.length,
-      Items: orderItems
-    };
-  });
-
-  enriched.sort((a, b) => {
-    const dateA = new Date(a.CreatedAt);
-    const dateB = new Date(b.CreatedAt);
-    return dateB - dateA;
-  });
-
-  return { success: true, data: enriched };
-}
-
-function getOrderDetail(orderId) {
-  if (!orderId) return { success: false, message: "Order ID is required" };
-
-  const orders = getDataAsObjects(SHEET_ORDERS);
-  const items = getDataAsObjects(SHEET_ITEMS);
-
-  const order = orders.find(o => o.OrderID === orderId);
-  if (!order) return { success: false, message: "Order not found" };
-
-  const orderItems = items.filter(it => it.OrderID === orderId);
-
-  return {
-    success: true,
-    data: { ...order, Items: orderItems }
-  };
-}
-
-function getDashboardStats() {
-  const orders = getDataAsObjects(SHEET_ORDERS);
-  const now = new Date();
-  const currentMonth = now.getMonth();
-  const currentYear = now.getFullYear();
-
-  const totalOrders = orders.length;
-  const pendingOrders = orders.filter(o => o.Status === "Pending").length;
-  const completedOrders = orders.filter(o => o.Status === "Completed").length;
-
-  const ordersThisMonth = orders.filter(o => {
-    const d = new Date(o.Date);
-    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-  }).length;
-
-  const inProgressOrders = orders.filter(o => o.Status === "In Progress").length;
-  const cancelledOrders = orders.filter(o => o.Status === "Cancelled").length;
-
-  const recentOrders = orders
-    .sort((a, b) => new Date(b.CreatedAt) - new Date(a.CreatedAt))
-    .slice(0, 5);
-
-  const items = getDataAsObjects(SHEET_ITEMS);
-  const recentWithItems = recentOrders.map(order => ({
-    ...order,
-    ItemCount: items.filter(it => it.OrderID === order.OrderID).length
-  }));
-
-  return {
-    success: true,
-    data: {
-      totalOrders,
-      pendingOrders,
-      completedOrders,
-      ordersThisMonth,
-      inProgressOrders,
-      cancelledOrders,
-      recentOrders: recentWithItems
-    }
-  };
-}
-
-function searchOrders(query) {
-  if (!query) return getOrders({});
-
-  const q = query.toLowerCase();
-  const orders = getDataAsObjects(SHEET_ORDERS);
-  const items = getDataAsObjects(SHEET_ITEMS);
-
-  const filtered = orders.filter(order => {
-    if (order.OrderID && order.OrderID.toLowerCase().includes(q)) return true;
-    if (order.RequesterName && order.RequesterName.toLowerCase().includes(q)) return true;
-
-    const orderItems = items.filter(it => it.OrderID === order.OrderID);
-    return orderItems.some(it =>
-      it.ItemName && it.ItemName.toLowerCase().includes(q)
+  // Search
+  if (params.q) {
+    const q = params.q.toLowerCase();
+    enriched = enriched.filter(o =>
+      (o.OrderID && o.OrderID.toLowerCase().includes(q)) ||
+      (o.RequesterName && o.RequesterName.toLowerCase().includes(q)) ||
+      (o.Items && o.Items.some(it => it.ItemName && it.ItemName.toLowerCase().includes(q)))
     );
-  });
+  }
 
-  const enriched = filtered.map(order => {
-    const orderItems = items.filter(it => it.OrderID === order.OrderID);
-    return { ...order, ItemCount: orderItems.length, Items: orderItems };
-  });
-
-  return { success: true, data: enriched };
-}
-
-function filterOrders(params) {
-  let orders = getDataAsObjects(SHEET_ORDERS);
-  const items = getDataAsObjects(SHEET_ITEMS);
-
+  // Filter: status
   if (params.status) {
-    orders = orders.filter(o => o.Status === params.status);
+    enriched = enriched.filter(o => o.Status === params.status);
   }
+
+  // Filter: department
   if (params.department) {
-    orders = orders.filter(o => o.Department === params.department);
+    enriched = enriched.filter(o => o.Department === params.department);
   }
+
+  // Filter: month + year
   if (params.month && params.year) {
     const m = parseInt(params.month) - 1;
     const y = parseInt(params.year);
-    orders = orders.filter(o => {
+    enriched = enriched.filter(o => {
       const d = new Date(o.Date);
       return d.getMonth() === m && d.getFullYear() === y;
     });
   } else if (params.year) {
     const y = parseInt(params.year);
-    orders = orders.filter(o => new Date(o.Date).getFullYear() === y);
+    enriched = enriched.filter(o => new Date(o.Date).getFullYear() === y);
   }
 
-  if (params.sort) {
-    const dir = params.dir === "asc" ? 1 : -1;
-    orders.sort((a, b) => {
-      if (params.sort === "date") {
-        return dir * (new Date(a.Date) - new Date(b.Date));
-      } else if (params.sort === "orderId") {
-        return dir * a.OrderID.localeCompare(b.OrderID);
-      }
-      return 0;
-    });
-  } else {
-    orders.sort((a, b) => new Date(b.CreatedAt) - new Date(a.CreatedAt));
-  }
-
-  const enriched = orders.map(order => {
-    const orderItems = items.filter(it => it.OrderID === order.OrderID);
-    return { ...order, ItemCount: orderItems.length, Items: orderItems };
+  // Sort
+  const sortField = params.sort || "date";
+  const sortDir = params.dir === "asc" ? 1 : -1;
+  enriched.sort((a, b) => {
+    if (sortField === "date") {
+      return sortDir * (new Date(a.Date) - new Date(b.Date));
+    } else if (sortField === "orderId") {
+      return sortDir * a.OrderID.localeCompare(b.OrderID);
+    } else if (sortField === "status") {
+      return sortDir * a.Status.localeCompare(b.Status);
+    }
+    return 0;
   });
 
-  return { success: true, data: enriched };
+  // Pagination
+  const page = Math.max(1, parseInt(params.page) || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(params.pageSize) || 25));
+  const total = enriched.length;
+  const totalPages = Math.ceil(total / pageSize);
+  const start = (page - 1) * pageSize;
+  const paged = enriched.slice(start, start + pageSize);
+
+  return {
+    success: true,
+    data: paged,
+    pagination: { page, pageSize, total, totalPages }
+  };
+}
+
+function getOrderDetail(orderId) {
+  if (!orderId) return { success: false, message: "Order ID is required" };
+
+  const { orders, items } = readAllData();
+  const order = orders.find(o => o.OrderID === orderId);
+  if (!order) return { success: false, message: "Order not found" };
+
+  const orderItems = items.filter(it => it.OrderID === orderId);
+  return { success: true, data: { ...order, Items: orderItems } };
+}
+
+function getDashboardStats() {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get("dashboard_stats");
+  if (cached) return JSON.parse(cached);
+
+  const { orders, items } = readAllData();
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+
+  const stats = {
+    totalOrders: orders.length,
+    pendingOrders: orders.filter(o => o.Status === "Pending").length,
+    completedOrders: orders.filter(o => o.Status === "Completed").length,
+    inProgressOrders: orders.filter(o => o.Status === "In Progress").length,
+    cancelledOrders: orders.filter(o => o.Status === "Cancelled").length,
+    ordersThisMonth: orders.filter(o => {
+      const d = new Date(o.Date);
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    }).length
+  };
+
+  // Recent 5 orders with item counts
+  const itemMap = {};
+  items.forEach(it => {
+    if (!itemMap[it.OrderID]) itemMap[it.OrderID] = 0;
+    itemMap[it.OrderID]++;
+  });
+
+  const recentOrders = orders
+    .sort((a, b) => new Date(b.CreatedAt) - new Date(a.CreatedAt))
+    .slice(0, 5)
+    .map(o => ({ ...o, ItemCount: itemMap[o.OrderID] || 0 }));
+
+  stats.recentOrders = recentOrders;
+
+  const result = { success: true, data: stats };
+  cache.put("dashboard_stats", JSON.stringify(result), CACHE_TTL);
+  return result;
+}
+
+function getDepartments() {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get("departments");
+  if (cached) return JSON.parse(cached);
+
+  const result = {
+    success: true,
+    data: [
+      "Engineering", "Project Management", "Procurement",
+      "Operations", "Finance", "HR & Admin", "IT",
+      "Marketing", "Logistics", "Other"
+    ]
+  };
+  cache.put("departments", JSON.stringify(result), 3600);
+  return result;
 }
 
 function createOrder(body) {
-  const {
-    date, requesterName, department, purpose, notes, items, createdBy
-  } = body;
+  const { date, requesterName, department, purpose, notes, items, createdBy } = body;
 
   if (!requesterName || !department || !items || items.length === 0) {
     return { success: false, message: "Missing required fields" };
@@ -356,28 +306,21 @@ function createOrder(body) {
   ]);
 
   const itemsSheet = getSheet(SHEET_ITEMS);
-  items.forEach(item => {
-    itemsSheet.appendRow([
-      orderId,
-      item.itemName,
-      item.quantity || 0,
-      item.unit || "pcs",
-      item.notes || ""
-    ]);
-  });
+  const itemRows = items.map(item => [
+    orderId, item.itemName, item.quantity || 0, item.unit || "pcs", item.notes || ""
+  ]);
+  if (itemRows.length > 0) {
+    itemsSheet.getRange(itemsSheet.getLastRow() + 1, 1, itemRows.length, 5).setValues(itemRows);
+  }
 
-  return {
-    success: true,
-    message: "Order created successfully",
-    data: { orderId }
-  };
+  // Invalidate cache
+  CacheService.getScriptCache().remove("dashboard_stats");
+
+  return { success: true, message: "Order created successfully", data: { orderId } };
 }
 
 function updateOrder(body) {
-  const {
-    orderId, date, requesterName, department, purpose, notes, items
-  } = body;
-
+  const { orderId, date, requesterName, department, purpose, notes, items } = body;
   if (!orderId) return { success: false, message: "Order ID is required" };
 
   const ordersSheet = getSheet(SHEET_ORDERS);
@@ -390,7 +333,6 @@ function updateOrder(body) {
       break;
     }
   }
-
   if (rowIndex === -1) return { success: false, message: "Order not found" };
 
   if (date) ordersSheet.getRange(rowIndex, 2).setValue(date);
@@ -405,40 +347,30 @@ function updateOrder(body) {
     const rowsToDelete = [];
 
     for (let i = 1; i < itemData.length; i++) {
-      if (itemData[i][0] === orderId) {
-        rowsToDelete.push(i + 1);
-      }
+      if (itemData[i][0] === orderId) rowsToDelete.push(i + 1);
     }
-
     for (let i = rowsToDelete.length - 1; i >= 0; i--) {
       itemsSheet.deleteRow(rowsToDelete[i]);
     }
 
-    items.forEach(item => {
-      itemsSheet.appendRow([
-        orderId,
-        item.itemName,
-        item.quantity || 0,
-        item.unit || "pcs",
-        item.notes || ""
-      ]);
-    });
+    const itemRows = items.map(item => [
+      orderId, item.itemName, item.quantity || 0, item.unit || "pcs", item.notes || ""
+    ]);
+    if (itemRows.length > 0) {
+      itemsSheet.getRange(itemsSheet.getLastRow() + 1, 1, itemRows.length, 5).setValues(itemRows);
+    }
   }
 
+  CacheService.getScriptCache().remove("dashboard_stats");
   return { success: true, message: "Order updated successfully" };
 }
 
 function updateOrderStatus(body) {
   const { orderId, status } = body;
-
-  if (!orderId || !status) {
-    return { success: false, message: "Order ID and status are required" };
-  }
+  if (!orderId || !status) return { success: false, message: "Order ID and status are required" };
 
   const validStatuses = ["Pending", "In Progress", "Completed", "Cancelled"];
-  if (!validStatuses.includes(status)) {
-    return { success: false, message: "Invalid status" };
-  }
+  if (!validStatuses.includes(status)) return { success: false, message: "Invalid status" };
 
   const ordersSheet = getSheet(SHEET_ORDERS);
   const data = ordersSheet.getDataRange().getValues();
@@ -447,13 +379,9 @@ function updateOrderStatus(body) {
     if (data[i][0] === orderId) {
       const row = i + 1;
       ordersSheet.getRange(row, 7).setValue(status);
+      ordersSheet.getRange(row, 9).setValue(status === "Completed" ? new Date().toISOString() : "");
 
-      if (status === "Completed") {
-        ordersSheet.getRange(row, 9).setValue(new Date().toISOString());
-      } else if (status !== "Completed") {
-        ordersSheet.getRange(row, 9).setValue("");
-      }
-
+      CacheService.getScriptCache().remove("dashboard_stats");
       return { success: true, message: "Status updated to " + status };
     }
   }
@@ -477,63 +405,181 @@ function deleteOrder(orderId) {
   const itemsSheet = getSheet(SHEET_ITEMS);
   const itemData = itemsSheet.getDataRange().getValues();
   const rowsToDelete = [];
-
   for (let i = 1; i < itemData.length; i++) {
-    if (itemData[i][0] === orderId) {
-      rowsToDelete.push(i + 1);
-    }
+    if (itemData[i][0] === orderId) rowsToDelete.push(i + 1);
   }
-
   for (let i = rowsToDelete.length - 1; i >= 0; i--) {
     itemsSheet.deleteRow(rowsToDelete[i]);
   }
 
+  CacheService.getScriptCache().remove("dashboard_stats");
   return { success: true, message: "Order deleted successfully" };
 }
 
 // ========================================
-// Master Data
+// Professional Excel Export
 // ========================================
 
-function getMasterItems() {
-  return { success: true, data: getDataAsObjects(SHEET_MASTER) };
-}
+function exportExcel(params) {
+  const { orders, items } = readAllData();
+  let filtered = buildOrderMap(orders, items);
 
-function addMasterItem(body) {
-  const { name, unit, category } = body;
-  if (!name) return { success: false, message: "Item name is required" };
+  // Apply same filters as getOrders
+  if (params.q) {
+    const q = params.q.toLowerCase();
+    filtered = filtered.filter(o =>
+      (o.OrderID && o.OrderID.toLowerCase().includes(q)) ||
+      (o.RequesterName && o.RequesterName.toLowerCase().includes(q)) ||
+      (o.Items && o.Items.some(it => it.ItemName && it.ItemName.toLowerCase().includes(q)))
+    );
+  }
+  if (params.status) filtered = filtered.filter(o => o.Status === params.status);
+  if (params.department) filtered = filtered.filter(o => o.Department === params.department);
+  if (params.month && params.year) {
+    const m = parseInt(params.month) - 1;
+    const y = parseInt(params.year);
+    filtered = filtered.filter(o => {
+      const d = new Date(o.Date);
+      return d.getMonth() === m && d.getFullYear() === y;
+    });
+  }
 
-  const sheet = getSheet(SHEET_MASTER);
-  const data = sheet.getDataRange().getValues();
-  const newId = "MI-" + String(data.length).padStart(3, "0");
+  filtered.sort((a, b) => new Date(b.CreatedAt) - new Date(a.CreatedAt));
 
-  sheet.appendRow([newId, name, unit || "pcs", category || "General"]);
-  return { success: true, message: "Item added", data: { id: newId } };
-}
+  // Create temporary spreadsheet
+  const tempSS = SpreadsheetApp.create("Work Orders Export");
+  const tempSheet = tempSS.getActiveSheet();
+  tempSheet.setName("Work Orders");
 
-function deleteMasterItem(id) {
-  if (!id) return { success: false, message: "ID is required" };
+  // Title row
+  tempSheet.getRange("A1").setValue("PT. RRA — Work Orders Report");
+  tempSheet.getRange("A1").setFontSize(14).setFontWeight("bold").setFontColor("#115e59");
+  tempSheet.merge("A1:H1");
 
-  const sheet = getSheet(SHEET_MASTER);
-  const data = sheet.getDataRange().getValues();
+  // Subtitle
+  const now = new Date();
+  const dateStr = Utilities.formatDate(now, "Asia/Jakarta", "dd MMM yyyy HH:mm");
+  tempSheet.getRange("A2").setValue("Generated: " + dateStr);
+  tempSheet.getRange("A2").setFontSize(9).setFontColor("#64748b");
+  tempSheet.merge("A2:H2");
 
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === id) {
-      sheet.deleteRow(i + 1);
-      return { success: true, message: "Item deleted" };
+  // Summary row
+  tempSheet.getRange("A3").setValue("Total Orders: " + filtered.length);
+  tempSheet.getRange("A3").setFontSize(9).setFontColor("#64748b");
+  tempSheet.merge("A3:H3");
+
+  // Headers
+  const headers = ["Order ID", "Date", "Requester", "Department", "Purpose", "Items", "Status", "Notes"];
+  tempSheet.getRange(5, 1, 1, headers.length).setValues([headers]);
+  tempSheet.getRange(5, 1, 1, headers.length)
+    .setBackground("#0d9488")
+    .setFontColor("#ffffff")
+    .setFontWeight("bold")
+    .setFontSize(10)
+    .setHorizontalAlignment("center");
+
+  // Data rows
+  const rows = filtered.map(o => [
+    o.OrderID,
+    o.Date,
+    o.RequesterName,
+    o.Department,
+    o.Purpose || "",
+    (o.Items || []).map(it => it.ItemName + " (" + it.Quantity + " " + it.Unit + ")").join(", "),
+    o.Status,
+    o.Notes || ""
+  ]);
+
+  if (rows.length > 0) {
+    tempSheet.getRange(6, 1, rows.length, headers.length).setValues(rows);
+  }
+
+  // Alternating row colors
+  for (let i = 0; i < rows.length; i++) {
+    if (i % 2 === 0) {
+      tempSheet.getRange(6 + i, 1, 1, headers.length).setBackground("#f0fdfa");
     }
   }
 
-  return { success: false, message: "Item not found" };
-}
+  // Borders
+  const dataRange = tempSheet.getRange(5, 1, rows.length + 1, headers.length);
+  dataRange.setBorder(true, true, true, true, true, true, "#e2e8f0", SpreadsheetApp.BorderStyle.SOLID);
 
-function getDepartments() {
+  // Column widths
+  tempSheet.setColumnWidth(1, 160); // Order ID
+  tempSheet.setColumnWidth(2, 100); // Date
+  tempSheet.setColumnWidth(3, 140); // Requester
+  tempSheet.setColumnWidth(4, 130); // Department
+  tempSheet.setColumnWidth(5, 180); // Purpose
+  tempSheet.setColumnWidth(6, 250); // Items
+  tempSheet.setColumnWidth(7, 100); // Status
+  tempSheet.setColumnWidth(8, 180); // Notes
+
+  // Status color coding
+  for (let i = 0; i < rows.length; i++) {
+    const statusCell = tempSheet.getRange(6 + i, 7);
+    const status = rows[i][6];
+    if (status === "Pending") {
+      statusCell.setBackground("#fef3c7").setFontColor("#92400e");
+    } else if (status === "In Progress") {
+      statusCell.setBackground("#dbeafe").setFontColor("#1e40af");
+    } else if (status === "Completed") {
+      statusCell.setBackground("#d1fae5").setFontColor("#065f46");
+    } else if (status === "Cancelled") {
+      statusCell.setBackground("#fee2e2").setFontColor("#991b1b");
+    }
+  }
+
+  // Freeze header row
+  tempSheet.setFrozenRows(5);
+
+  // Auto-filter
+  if (rows.length > 0) {
+    tempSheet.getRange(5, 1, rows.length + 1, headers.length).createFilter();
+  }
+
+  // Text wrapping for items and notes columns
+  tempSheet.getRange(6, 6, rows.length, 1).setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
+  tempSheet.getRange(6, 8, rows.length, 1).setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
+
+  // Summary sheet
+  const summarySheet = tempSS.insertSheet("Summary");
+  summarySheet.getRange("A1").setValue("Summary");
+  summarySheet.getRange("A1").setFontSize(13).setFontWeight("bold");
+
+  const summaryData = [
+    ["Metric", "Value"],
+    ["Total Orders", filtered.length],
+    ["Pending", filtered.filter(o => o.Status === "Pending").length],
+    ["In Progress", filtered.filter(o => o.Status === "In Progress").length],
+    ["Completed", filtered.filter(o => o.Status === "Completed").length],
+    ["Cancelled", filtered.filter(o => o.Status === "Cancelled").length],
+    [""],
+    ["Department Breakdown"],
+  ];
+
+  // Department counts
+  const deptCounts = {};
+  filtered.forEach(o => { deptCounts[o.Department] = (deptCounts[o.Department] || 0) + 1; });
+  Object.keys(deptCounts).sort().forEach(dept => {
+    summaryData.push([dept, deptCounts[dept]]);
+  });
+
+  summarySheet.getRange(1, 1, summaryData.length, 2).setValues(summaryData);
+  summarySheet.getRange(1, 1, 1, 2).setBackground("#0d9488").setFontColor("#ffffff").setFontWeight("bold");
+  summarySheet.setColumnWidth(1, 180);
+  summarySheet.setColumnWidth(2, 100);
+
+  // Get XLSX blob and convert to base64
+  const xlsxBlob = tempSS.getAs("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  const base64 = Utilities.base64Encode(xlsxBlob.getBytes());
+
+  // Clean up temp file
+  DriveApp.getFileById(tempSS.getId()).setTrashed(true);
+
   return {
     success: true,
-    data: [
-      "Engineering", "Project Management", "Procurement",
-      "Operations", "Finance", "HR & Admin", "IT",
-      "Marketing", "Logistics", "Other"
-    ]
+    data: base64,
+    filename: "Work_Orders_" + Utilities.formatDate(now, "Asia/Jakarta", "yyyyMMdd_HHmmss") + ".xlsx"
   };
 }

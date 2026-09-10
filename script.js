@@ -1,140 +1,53 @@
 // ========================================
-// Work Order Management System
-// Main Application Script
+// Work Order Management System - Frontend
+// Optimized with skeleton, polling, pagination
 // ========================================
 
-// ========================================
-// State
-// ========================================
-let allOrders = [];
-let filteredOrders = [];
+// --- State ---
 let currentPage = 1;
-let useMockData = true;
-let searchTimeout = null;
-let currentDetailOrder = null;
+let currentPageSize = 25;
+let currentFilters = {};
+let currentSort = { field: "date", dir: "desc" };
+let allOrders = [];
+let allOrdersTotal = 0;
+let allOrdersTotalPages = 0;
+let currentOrder = null;
+let editingOrderId = null;
+let isLoadingOrders = false;
+let pollTimer = null;
 
-// ========================================
-// Initialization
-// ========================================
+const DEBOUNCE_MS = 350;
+const POLL_INTERVAL = 25000;
 
+// --- Init ---
 document.addEventListener("DOMContentLoaded", () => {
-  API.init();
-  loadSavedConfig();
-  lucide.createIcons();
-  populateDepartments();
-  setDefaultDate();
+  loadDashboard();
+  loadFilters();
   addItemRow();
-
-  if (CONFIG.API_URL && CONFIG.API_URL !== "YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL") {
-    useMockData = false;
-    loadData();
-  } else {
-    loadMockData();
-  }
+  startPolling();
 });
 
-function loadSavedConfig() {
-  const saved = localStorage.getItem("wo_api_url");
-  if (saved) {
-    CONFIG.API_URL = saved;
-    API.init();
-    useMockData = false;
-  }
-}
-
-function setDefaultDate() {
-  const dateInput = document.getElementById("form-date");
-  if (dateInput) {
-    const today = new Date().toISOString().split("T")[0];
-    dateInput.value = today;
-  }
-}
-
-// ========================================
-// Data Loading
-// ========================================
-
-async function loadData() {
-  try {
-    showLoading();
-    const [ordersRes, statsRes] = await Promise.all([
-      API.getOrders(),
-      API.getDashboardStats()
-    ]);
-
-    if (ordersRes.success) {
-      allOrders = ordersRes.data;
-      filteredOrders = [...allOrders];
-      renderOrdersTable();
-    }
-
-    if (statsRes.success) {
-      renderDashboardStats(statsRes.data);
-      renderRecentOrders(statsRes.data.recentOrders);
-    }
-
-    hideLoading();
-  } catch (err) {
-    hideLoading();
-    showToast("Failed to load data. Using mock data.", "error");
-    loadMockData();
-  }
-}
-
-function loadMockData() {
-  useMockData = true;
-  allOrders = MOCK_DATA.orders;
-  filteredOrders = [...allOrders];
-  renderDashboardStats(MOCK_DATA.dashboard);
-  renderRecentOrders(MOCK_DATA.dashboard.recentOrders);
-  renderOrdersTable();
-}
-
-// ========================================
-// Navigation
-// ========================================
-
+// --- Navigation ---
 function navigateTo(page) {
   document.querySelectorAll(".page").forEach(p => p.classList.add("hidden"));
   document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
 
-  document.getElementById("page-" + page).classList.remove("hidden");
-  document.getElementById("nav-" + page).classList.add("active");
-
-  const titles = { dashboard: "Overview", orders: "Orders" };
-  document.getElementById("page-title").textContent = titles[page] || "Overview";
-
-  closeSidebar();
-
-  if (page === "dashboard" && useMockData) {
-    // Already loaded
-  } else if (page === "dashboard" && !useMockData) {
-    loadDashboardData();
-  } else if (page === "orders" && !useMockData) {
-    loadOrdersData();
+  if (page === "dashboard") {
+    document.getElementById("page-dashboard").classList.remove("hidden");
+    document.getElementById("nav-dashboard").classList.add("active");
+    document.getElementById("page-title").textContent = "Overview";
+    loadDashboard();
+  } else if (page === "orders") {
+    document.getElementById("page-orders").classList.remove("hidden");
+    document.getElementById("nav-orders").classList.add("active");
+    document.getElementById("page-title").textContent = "Orders";
+    loadOrders();
   }
-}
 
-async function loadDashboardData() {
-  const res = await API.getDashboardStats();
-  if (res.success) {
-    renderDashboardStats(res.data);
-    renderRecentOrders(res.data.recentOrders);
-  }
+  // Close mobile sidebar
+  document.getElementById("sidebar").classList.add("-translate-x-full");
+  document.getElementById("sidebar-overlay").classList.add("hidden");
 }
-
-async function loadOrdersData() {
-  const res = await API.getOrders();
-  if (res.success) {
-    allOrders = res.data;
-    filteredOrders = [...allOrders];
-    renderOrdersTable();
-  }
-}
-
-// ========================================
-// Sidebar
-// ========================================
 
 function toggleSidebar() {
   const sidebar = document.getElementById("sidebar");
@@ -143,50 +56,69 @@ function toggleSidebar() {
   overlay.classList.toggle("hidden");
 }
 
-function closeSidebar() {
-  const sidebar = document.getElementById("sidebar");
-  const overlay = document.getElementById("sidebar-overlay");
-  sidebar.classList.add("-translate-x-full");
-  overlay.classList.add("hidden");
-}
-
 // ========================================
 // Dashboard
 // ========================================
 
-function renderDashboardStats(stats) {
-  document.getElementById("stat-total").textContent = stats.totalOrders;
-  document.getElementById("stat-pending").textContent = stats.pendingOrders;
-  document.getElementById("stat-completed").textContent = stats.completedOrders;
-  document.getElementById("stat-month").textContent = stats.ordersThisMonth;
+function loadDashboard() {
+  ApiService.getDashboardStats().then(res => {
+    if (!res.success) return;
+    const d = res.data;
+
+    animateValue("stat-total", d.totalOrders);
+    animateValue("stat-pending", d.pendingOrders);
+    animateValue("stat-completed", d.completedOrders);
+    animateValue("stat-month", d.ordersThisMonth);
+
+    renderRecentOrders(d.recentOrders || []);
+  });
+}
+
+function animateValue(id, target) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const current = parseInt(el.textContent) || 0;
+  if (current === target) return;
+
+  const duration = 400;
+  const start = performance.now();
+
+  function update(now) {
+    const elapsed = now - start;
+    const progress = Math.min(elapsed / duration, 1);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    el.textContent = Math.round(current + (target - current) * eased);
+    if (progress < 1) requestAnimationFrame(update);
+  }
+  requestAnimationFrame(update);
 }
 
 function renderRecentOrders(orders) {
   const container = document.getElementById("recent-orders-list");
-  if (!orders || orders.length === 0) {
+  if (!orders.length) {
     container.innerHTML = `
       <div class="px-5 py-8 text-center text-sm text-surface-400">
         <i data-lucide="inbox" class="w-10 h-10 mx-auto mb-2 text-surface-300"></i>
-        No orders yet. Create your first work order!
+        No orders yet
       </div>`;
     lucide.createIcons();
     return;
   }
 
   container.innerHTML = orders.map(o => `
-    <div class="flex items-center justify-between px-5 py-3 hover:bg-surface-50 cursor-pointer transition-colors" onclick="openOrderDetail('${o.OrderID}')">
+    <div class="px-5 py-3.5 flex items-center justify-between hover:bg-surface-50/50 cursor-pointer transition-colors" onclick="openOrderDetail('${o.OrderID}')">
       <div class="flex items-center gap-3 min-w-0">
-        <div class="w-8 h-8 bg-surface-100 rounded-lg flex items-center justify-center flex-shrink-0">
-          <i data-lucide="file-text" class="w-4 h-4 text-surface-500"></i>
+        <div class="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${statusBg(o.Status)} ${statusText(o.Status)}">
+          ${o.Status.charAt(0)}
         </div>
         <div class="min-w-0">
-          <p class="text-sm font-medium text-surface-700 truncate">${o.OrderID}</p>
-          <p class="text-xs text-surface-400 truncate">${o.RequesterName} - ${o.Department}</p>
+          <p class="text-sm font-medium text-surface-800 truncate">${o.OrderID}</p>
+          <p class="text-xs text-surface-400 truncate">${o.RequesterName} &middot; ${o.Department}</p>
         </div>
       </div>
-      <div class="flex items-center gap-3 flex-shrink-0">
-        <span class="text-xs text-surface-400 hidden sm:inline">${formatDate(o.Date)}</span>
-        ${statusBadge(o.Status)}
+      <div class="text-right shrink-0 ml-3">
+        <span class="badge badge-${statusClass(o.Status)}">${o.Status}</span>
+        <p class="text-[11px] text-surface-400 mt-1">${o.ItemCount || 0} items</p>
       </div>
     </div>
   `).join("");
@@ -197,180 +129,178 @@ function renderRecentOrders(orders) {
 // Orders Table
 // ========================================
 
+function showOrdersSkeleton() {
+  const tbody = document.getElementById("orders-tbody");
+  tbody.innerHTML = Array.from({ length: 5 }, () => `
+    <tr>
+      <td class="px-5 py-4"><div class="skeleton h-4 w-28 rounded"></div></td>
+      <td class="px-5 py-4 hidden sm:table-cell"><div class="skeleton h-4 w-20 rounded"></div></td>
+      <td class="px-5 py-4"><div class="skeleton h-4 w-24 rounded"></div></td>
+      <td class="px-5 py-4 hidden md:table-cell"><div class="skeleton h-4 w-24 rounded"></div></td>
+      <td class="px-5 py-4 text-center"><div class="skeleton h-4 w-8 rounded mx-auto"></div></td>
+      <td class="px-5 py-4 text-center"><div class="skeleton h-5 w-16 rounded-full mx-auto"></div></td>
+      <td class="px-5 py-4 text-right"><div class="skeleton h-4 w-16 rounded ml-auto"></div></td>
+    </tr>
+  `).join("");
+}
+
+function loadOrders() {
+  if (isLoadingOrders) return;
+  isLoadingOrders = true;
+
+  showOrdersSkeleton();
+
+  const params = {
+    page: currentPage,
+    pageSize: currentPageSize,
+    sort: currentSort.field,
+    dir: currentSort.dir,
+    ...currentFilters
+  };
+
+  ApiService.getOrders(params).then(res => {
+    isLoadingOrders = false;
+    if (!res.success) {
+      showToast(res.message || "Failed to load orders", "error");
+      return;
+    }
+
+    allOrders = res.data;
+    allOrdersTotal = res.pagination.total;
+    allOrdersTotalPages = res.pagination.totalPages;
+    currentPage = res.pagination.page;
+
+    renderOrdersTable();
+    renderPagination();
+  });
+}
+
 function renderOrdersTable() {
   const tbody = document.getElementById("orders-tbody");
-  const perPage = CONFIG.ITEMS_PER_PAGE;
-  const start = (currentPage - 1) * perPage;
-  const pageItems = filteredOrders.slice(start, start + perPage);
 
-  if (filteredOrders.length === 0) {
+  if (!allOrders.length) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="7" class="px-5 py-12 text-center">
-          <div class="flex flex-col items-center">
-            <i data-lucide="search-x" class="w-10 h-10 text-surface-300 mb-2"></i>
-            <p class="text-sm text-surface-500 font-medium">No orders found</p>
-            <p class="text-xs text-surface-400 mt-1">Try adjusting your search or filters</p>
-          </div>
+        <td colspan="7" class="px-5 py-12 text-center text-sm text-surface-400">
+          <i data-lucide="search" class="w-10 h-10 mx-auto mb-2 text-surface-300"></i>
+          No orders found
         </td>
       </tr>`;
     lucide.createIcons();
-    updatePagination();
     return;
   }
 
-  tbody.innerHTML = pageItems.map(o => `
+  tbody.innerHTML = allOrders.map(o => `
     <tr onclick="openOrderDetail('${o.OrderID}')">
-      <td class="px-5 py-3">
-        <span class="text-sm font-semibold text-primary-600">${o.OrderID}</span>
+      <td class="px-5 py-4 text-sm font-medium text-surface-800">${o.OrderID}</td>
+      <td class="px-5 py-4 text-sm text-surface-500 hidden sm:table-cell">${formatDate(o.Date)}</td>
+      <td class="px-5 py-4">
+        <p class="text-sm text-surface-800">${o.RequesterName}</p>
       </td>
-      <td class="px-5 py-3 hidden sm:table-cell">
-        <span class="text-sm text-surface-600">${formatDate(o.Date)}</span>
+      <td class="px-5 py-4 hidden md:table-cell">
+        <p class="text-sm text-surface-500">${o.Department}</p>
       </td>
-      <td class="px-5 py-3">
-        <div>
-          <p class="text-sm font-medium text-surface-700">${o.RequesterName}</p>
-        </div>
+      <td class="px-5 py-4 text-center">
+        <span class="text-sm text-surface-600">${o.ItemCount || 0}</span>
       </td>
-      <td class="px-5 py-3 hidden md:table-cell">
-        <span class="text-sm text-surface-600">${o.Department}</span>
+      <td class="px-5 py-4 text-center">
+        <span class="badge badge-${statusClass(o.Status)}">${o.Status}</span>
       </td>
-      <td class="px-5 py-3 text-center">
-        <span class="inline-flex items-center justify-center w-7 h-7 bg-surface-100 rounded-lg text-xs font-semibold text-surface-600">${o.ItemCount || 0}</span>
-      </td>
-      <td class="px-5 py-3 text-center">
-        ${statusBadge(o.Status)}
-      </td>
-      <td class="px-5 py-3 text-right">
-        <button onclick="event.stopPropagation(); openOrderDetail('${o.OrderID}')" class="p-1.5 rounded-lg hover:bg-surface-100 transition-colors">
-          <i data-lucide="eye" class="w-4 h-4 text-surface-400"></i>
+      <td class="px-5 py-4 text-right">
+        <button onclick="event.stopPropagation(); openOrderDetail('${o.OrderID}')" class="text-xs font-medium text-primary-500 hover:text-primary-600 transition-colors">
+          View
         </button>
       </td>
     </tr>
   `).join("");
-
-  lucide.createIcons();
-  updatePagination();
 }
 
-function updatePagination() {
-  const perPage = CONFIG.ITEMS_PER_PAGE;
-  const total = filteredOrders.length;
-  const totalPages = Math.ceil(total / perPage);
-  const start = (currentPage - 1) * perPage + 1;
-  const end = Math.min(currentPage * perPage, total);
+function renderPagination() {
+  const info = document.getElementById("pagination-info");
+  const btns = document.getElementById("pagination-buttons");
 
-  document.getElementById("pagination-info").textContent =
-    total > 0 ? `Showing ${start}-${end} of ${total} orders` : "";
+  const start = (currentPage - 1) * currentPageSize + 1;
+  const end = Math.min(currentPage * currentPageSize, allOrdersTotal);
+  info.textContent = allOrdersTotal > 0
+    ? `Showing ${start}–${end} of ${allOrdersTotal}`
+    : "No results";
 
-  const btnContainer = document.getElementById("pagination-buttons");
-  if (totalPages <= 1) {
-    btnContainer.innerHTML = "";
+  // Page size selector + page buttons
+  let html = `
+    <select onchange="changePageSize(this.value)" class="px-2 py-1 text-xs border border-surface-200 rounded-lg mr-2">
+      <option value="10" ${currentPageSize === 10 ? "selected" : ""}>10</option>
+      <option value="25" ${currentPageSize === 25 ? "selected" : ""}>25</option>
+      <option value="50" ${currentPageSize === 50 ? "selected" : ""}>50</option>
+      <option value="100" ${currentPageSize === 100 ? "selected" : ""}>100</option>
+    </select>
+  `;
+
+  if (allOrdersTotalPages <= 1) {
+    btns.innerHTML = html;
     return;
   }
 
-  let html = "";
-  html += `<button onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? "disabled" : ""} class="px-3 py-1.5 text-xs font-medium rounded-lg border border-surface-200 ${currentPage === 1 ? "text-surface-300 cursor-not-allowed" : "text-surface-600 hover:bg-surface-50"}">Prev</button>`;
+  const maxButtons = 5;
+  let startPage = Math.max(1, currentPage - Math.floor(maxButtons / 2));
+  let endPage = Math.min(allOrdersTotalPages, startPage + maxButtons - 1);
+  if (endPage - startPage < maxButtons - 1) startPage = Math.max(1, endPage - maxButtons + 1);
 
-  for (let i = 1; i <= totalPages; i++) {
-    if (i === 1 || i === totalPages || (i >= currentPage - 1 && i <= currentPage + 1)) {
-      html += `<button onclick="goToPage(${i})" class="px-3 py-1.5 text-xs font-medium rounded-lg border ${i === currentPage ? "bg-primary-500 text-white border-primary-500" : "border-surface-200 text-surface-600 hover:bg-surface-50"}">${i}</button>`;
-    } else if (i === currentPage - 2 || i === currentPage + 2) {
-      html += `<span class="px-1 text-surface-400">...</span>`;
-    }
+  if (currentPage > 1) {
+    html += `<button onclick="goToPage(${currentPage - 1})" class="px-2.5 py-1 text-xs rounded-lg border border-surface-200 hover:bg-surface-50 transition-colors">&laquo;</button>`;
   }
 
-  html += `<button onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? "disabled" : ""} class="px-3 py-1.5 text-xs font-medium rounded-lg border border-surface-200 ${currentPage === totalPages ? "text-surface-300 cursor-not-allowed" : "text-surface-600 hover:bg-surface-50"}">Next</button>`;
+  for (let i = startPage; i <= endPage; i++) {
+    const active = i === currentPage
+      ? "bg-primary-500 text-white border-primary-500"
+      : "border-surface-200 hover:bg-surface-50";
+    html += `<button onclick="goToPage(${i})" class="px-2.5 py-1 text-xs rounded-lg border ${active} transition-colors">${i}</button>`;
+  }
 
-  btnContainer.innerHTML = html;
+  if (currentPage < allOrdersTotalPages) {
+    html += `<button onclick="goToPage(${currentPage + 1})" class="px-2.5 py-1 text-xs rounded-lg border border-surface-200 hover:bg-surface-50 transition-colors">&raquo;</button>`;
+  }
+
+  btns.innerHTML = html;
 }
 
 function goToPage(page) {
-  const totalPages = Math.ceil(filteredOrders.length / CONFIG.ITEMS_PER_PAGE);
-  if (page < 1 || page > totalPages) return;
   currentPage = page;
-  renderOrdersTable();
+  loadOrders();
+}
+
+function changePageSize(size) {
+  currentPageSize = parseInt(size);
+  currentPage = 1;
+  loadOrders();
 }
 
 // ========================================
-// Search & Filter
+// Filters & Search
 // ========================================
 
+let debounceTimer = null;
 function debounceSearch() {
-  clearTimeout(searchTimeout);
-  searchTimeout = setTimeout(() => {
-    applyFilters();
-  }, 300);
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => {
+    currentFilters.q = document.getElementById("search-input").value.trim();
+    currentPage = 1;
+    loadOrders();
+  }, DEBOUNCE_MS);
 }
 
-async function applyFilters() {
-  const search = document.getElementById("search-input").value.trim();
-  const status = document.getElementById("filter-status").value;
-  const department = document.getElementById("filter-department").value;
-  const month = document.getElementById("filter-month").value;
-  const sort = document.getElementById("filter-sort").value;
+function applyFilters() {
+  currentFilters.status = document.getElementById("filter-status").value;
+  currentFilters.department = document.getElementById("filter-department").value;
+  currentFilters.month = document.getElementById("filter-month").value;
 
-  if (useMockData) {
-    let result = [...allOrders];
+  const sortVal = document.getElementById("filter-sort").value;
+  if (sortVal === "date-desc") { currentSort = { field: "date", dir: "desc" }; }
+  else if (sortVal === "date-asc") { currentSort = { field: "date", dir: "asc" }; }
+  else if (sortVal === "orderId-asc") { currentSort = { field: "orderId", dir: "asc" }; }
+  else if (sortVal === "orderId-desc") { currentSort = { field: "orderId", dir: "desc" }; }
 
-    if (search) {
-      const q = search.toLowerCase();
-      result = result.filter(o =>
-        o.OrderID.toLowerCase().includes(q) ||
-        o.RequesterName.toLowerCase().includes(q) ||
-        (o.Items && o.Items.some(i => i.ItemName.toLowerCase().includes(q)))
-      );
-    }
-    if (status) result = result.filter(o => o.Status === status);
-    if (department) result = result.filter(o => o.Department === department);
-    if (month) {
-      result = result.filter(o => {
-        const d = new Date(o.Date);
-        return (d.getMonth() + 1) === parseInt(month);
-      });
-    }
-
-    const [field, dir] = sort.split("-");
-    result.sort((a, b) => {
-      const mult = dir === "asc" ? 1 : -1;
-      if (field === "date") return mult * (new Date(a.Date) - new Date(b.Date));
-      if (field === "orderId") return mult * a.OrderID.localeCompare(b.OrderID);
-      return 0;
-    });
-
-    filteredOrders = result;
-    currentPage = 1;
-    renderOrdersTable();
-  } else {
-    const params = {};
-    if (search) { params.q = search; }
-    if (status) params.status = status;
-    if (department) params.department = department;
-    if (month) {
-      params.month = month;
-      params.year = new Date().getFullYear();
-    }
-    if (sort) {
-      const [field, dir] = sort.split("-");
-      params.sort = field;
-      params.dir = dir;
-    }
-
-    let res;
-    if (search) {
-      res = await API.searchOrders(search);
-    } else if (status || department || month) {
-      res = await API.filterOrders(params);
-    } else {
-      res = await API.getOrders();
-    }
-
-    if (res.success) {
-      filteredOrders = res.data;
-      currentPage = 1;
-      renderOrdersTable();
-    }
-  }
+  currentPage = 1;
+  loadOrders();
 }
 
 function clearFilters() {
@@ -379,930 +309,512 @@ function clearFilters() {
   document.getElementById("filter-department").value = "";
   document.getElementById("filter-month").value = "";
   document.getElementById("filter-sort").value = "date-desc";
-  filteredOrders = [...allOrders];
+  currentFilters = {};
+  currentSort = { field: "date", dir: "desc" };
   currentPage = 1;
-  renderOrdersTable();
+  loadOrders();
+}
+
+function loadFilters() {
+  const deptSelect = document.getElementById("filter-department");
+  CONFIG.DEPARTMENTS.forEach(d => {
+    const opt = document.createElement("option");
+    opt.value = d;
+    opt.textContent = d;
+    deptSelect.appendChild(opt);
+  });
+
+  // Populate form department dropdown
+  const formDept = document.getElementById("form-department");
+  CONFIG.DEPARTMENTS.forEach(d => {
+    const opt = document.createElement("option");
+    opt.value = d;
+    opt.textContent = d;
+    formDept.appendChild(opt);
+  });
+}
+
+// ========================================
+// Auto-Refresh Polling
+// ========================================
+
+function startPolling() {
+  stopPolling();
+  pollTimer = setInterval(() => {
+    const ordersPage = document.getElementById("page-orders");
+    if (!ordersPage.classList.contains("hidden") && !isLoadingOrders) {
+      ApiService.invalidateOrders();
+      loadOrders();
+    }
+  }, POLL_INTERVAL);
+}
+
+function stopPolling() {
+  if (pollTimer) clearInterval(pollTimer);
 }
 
 // ========================================
 // Order Detail Drawer
 // ========================================
 
-async function openOrderDetail(orderId) {
-  const drawer = document.getElementById("detail-drawer");
-  const panel = document.getElementById("drawer-panel");
-
-  currentDetailOrder = allOrders.find(o => o.OrderID === orderId);
-
-  if (!currentDetailOrder) {
-    showToast("Order not found", "error");
-    return;
+function openOrderDetail(orderId) {
+  // Try local cache first
+  const local = allOrders.find(o => o.OrderID === orderId);
+  if (local) {
+    currentOrder = local;
+    renderDrawer(local);
+  } else {
+    ApiService.getOrderDetail(orderId).then(res => {
+      if (!res.success) { showToast(res.message, "error"); return; }
+      currentOrder = res.data;
+      renderDrawer(res.data);
+    });
   }
 
-  renderDrawerContent();
+  const drawer = document.getElementById("detail-drawer");
+  const panel = document.getElementById("drawer-panel");
   drawer.classList.remove("hidden");
   requestAnimationFrame(() => {
     drawer.classList.add("open");
+    panel.classList.remove("translate-x-full");
   });
 }
 
-function renderDrawerContent() {
-  const o = currentDetailOrder;
+function closeDrawer() {
+  const drawer = document.getElementById("detail-drawer");
+  const panel = document.getElementById("drawer-panel");
+  drawer.classList.remove("open");
+  panel.classList.add("translate-x-full");
+  setTimeout(() => {
+    drawer.classList.add("hidden");
+    editingOrderId = null;
+  }, 300);
+}
+
+function renderDrawer(order) {
   const body = document.getElementById("drawer-body");
   const footer = document.getElementById("drawer-footer");
 
   body.innerHTML = `
     <div class="space-y-5">
-      <!-- Order Header -->
-      <div>
-        <div class="flex items-center gap-2 mb-1">
-          <span class="text-lg font-bold text-primary-600">${o.OrderID}</span>
-          ${statusBadge(o.Status)}
+      <div class="flex items-center justify-between">
+        <div>
+          <h4 class="text-lg font-bold text-surface-800">${order.OrderID}</h4>
+          <p class="text-xs text-surface-400 mt-0.5">Created ${formatDateTime(order.CreatedAt)}</p>
         </div>
-        <p class="text-xs text-surface-400">Created: ${formatDateTime(o.CreatedAt)}</p>
-        ${o.CompletedAt ? `<p class="text-xs text-emerald-600">Completed: ${formatDateTime(o.CompletedAt)}</p>` : ""}
+        <span class="badge badge-${statusClass(order.Status)}">${order.Status}</span>
       </div>
-
-      <!-- Info Grid -->
-      <div class="grid grid-cols-2 gap-3">
-        <div class="bg-surface-50 rounded-xl p-3">
-          <p class="text-[10px] font-semibold text-surface-400 uppercase tracking-wider mb-1">Requester</p>
-          <p class="text-sm font-medium text-surface-700">${o.RequesterName}</p>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <p class="text-[11px] font-medium text-surface-400 uppercase tracking-wider mb-1">Date</p>
+          <p class="text-sm text-surface-800">${formatDate(order.Date)}</p>
         </div>
-        <div class="bg-surface-50 rounded-xl p-3">
-          <p class="text-[10px] font-semibold text-surface-400 uppercase tracking-wider mb-1">Department</p>
-          <p class="text-sm font-medium text-surface-700">${o.Department}</p>
+        <div>
+          <p class="text-[11px] font-medium text-surface-400 uppercase tracking-wider mb-1">Requester</p>
+          <p class="text-sm text-surface-800">${order.RequesterName}</p>
         </div>
-        <div class="bg-surface-50 rounded-xl p-3">
-          <p class="text-[10px] font-semibold text-surface-400 uppercase tracking-wider mb-1">Order Date</p>
-          <p class="text-sm font-medium text-surface-700">${formatDate(o.Date)}</p>
+        <div>
+          <p class="text-[11px] font-medium text-surface-400 uppercase tracking-wider mb-1">Department</p>
+          <p class="text-sm text-surface-800">${order.Department}</p>
         </div>
-        <div class="bg-surface-50 rounded-xl p-3">
-          <p class="text-[10px] font-semibold text-surface-400 uppercase tracking-wider mb-1">Items</p>
-          <p class="text-sm font-medium text-surface-700">${(o.Items || []).length} item(s)</p>
+        <div>
+          <p class="text-[11px] font-medium text-surface-400 uppercase tracking-wider mb-1">Purpose</p>
+          <p class="text-sm text-surface-800">${order.Purpose || "-"}</p>
         </div>
       </div>
-
-      <!-- Purpose -->
+      ${order.Notes ? `
+        <div>
+          <p class="text-[11px] font-medium text-surface-400 uppercase tracking-wider mb-1">Notes</p>
+          <p class="text-sm text-surface-700 bg-surface-50 rounded-xl p-3">${order.Notes}</p>
+        </div>
+      ` : ""}
       <div>
-        <p class="text-[10px] font-semibold text-surface-400 uppercase tracking-wider mb-1.5">Purpose</p>
-        <p class="text-sm text-surface-700 bg-surface-50 rounded-xl p-3">${o.Purpose || "-"}</p>
-      </div>
-
-      ${o.Notes ? `
-      <div>
-        <p class="text-[10px] font-semibold text-surface-400 uppercase tracking-wider mb-1.5">Notes</p>
-        <p class="text-sm text-surface-700 bg-surface-50 rounded-xl p-3">${o.Notes}</p>
-      </div>` : ""}
-
-      <!-- Items Table -->
-      <div>
-        <p class="text-[10px] font-semibold text-surface-400 uppercase tracking-wider mb-2">Items</p>
-        <div class="bg-surface-50 rounded-xl overflow-hidden">
-          <table class="w-full">
-            <thead>
-              <tr class="border-b border-surface-200">
-                <th class="text-left px-3 py-2 text-[10px] font-semibold text-surface-500 uppercase">Item</th>
-                <th class="text-center px-3 py-2 text-[10px] font-semibold text-surface-500 uppercase">Qty</th>
-                <th class="text-center px-3 py-2 text-[10px] font-semibold text-surface-500 uppercase">Unit</th>
-                <th class="text-left px-3 py-2 text-[10px] font-semibold text-surface-500 uppercase">Notes</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-surface-200">
-              ${(o.Items || []).map(item => `
-                <tr>
-                  <td class="px-3 py-2 text-sm text-surface-700 font-medium">${item.ItemName}</td>
-                  <td class="px-3 py-2 text-sm text-surface-600 text-center">${item.Quantity}</td>
-                  <td class="px-3 py-2 text-sm text-surface-600 text-center">${item.Unit}</td>
-                  <td class="px-3 py-2 text-sm text-surface-500">${item.Notes || "-"}</td>
-                </tr>
-              `).join("")}
-            </tbody>
-          </table>
+        <p class="text-[11px] font-medium text-surface-400 uppercase tracking-wider mb-2">Items</p>
+        <div class="space-y-2">
+          ${(order.Items || []).map(it => `
+            <div class="flex items-center justify-between bg-surface-50 rounded-xl px-3 py-2.5">
+              <div class="min-w-0">
+                <p class="text-sm font-medium text-surface-800 truncate">${it.ItemName}</p>
+                ${it.Notes ? `<p class="text-xs text-surface-400 truncate">${it.Notes}</p>` : ""}
+              </div>
+              <span class="text-sm font-semibold text-surface-700 shrink-0 ml-3">${it.Quantity} ${it.Unit}</span>
+            </div>
+          `).join("")}
         </div>
       </div>
     </div>
   `;
 
-  // Footer buttons
-  let footerHtml = `<div class="flex flex-wrap gap-2">`;
-  footerHtml += `<button onclick="editOrder('${o.OrderID}')" class="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-surface-600 bg-white border border-surface-200 rounded-xl hover:bg-surface-50 transition-colors"><i data-lucide="pencil" class="w-3.5 h-3.5"></i> Edit</button>`;
-
-  if (o.Status !== "Completed" && o.Status !== "Cancelled") {
-    footerHtml += `<button onclick="markCompleted('${o.OrderID}')" class="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-white bg-emerald-500 hover:bg-emerald-600 rounded-xl transition-colors"><i data-lucide="check" class="w-3.5 h-3.5"></i> Mark Completed</button>`;
-  }
-
-  if (o.Status !== "Cancelled" && o.Status !== "Completed") {
-    footerHtml += `<button onclick="cancelOrder('${o.OrderID}')" class="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-xl hover:bg-red-100 transition-colors"><i data-lucide="x-circle" class="w-3.5 h-3.5"></i> Cancel</button>`;
-  }
-
-  footerHtml += `<button onclick="exportWorkOrder('${o.OrderID}')" class="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-surface-600 bg-white border border-surface-200 rounded-xl hover:bg-surface-50 transition-colors ml-auto"><i data-lucide="download" class="w-3.5 h-3.5"></i> Export</button>`;
-  footerHtml += `</div>`;
-
-  footer.innerHTML = footerHtml;
-  lucide.createIcons();
-}
-
-function closeDrawer() {
-  const drawer = document.getElementById("detail-drawer");
-  drawer.classList.remove("open");
-  setTimeout(() => drawer.classList.add("hidden"), 300);
-  currentDetailOrder = null;
+  const isEditable = order.Status !== "Completed" && order.Status !== "Cancelled";
+  footer.innerHTML = `
+    <div class="flex flex-wrap gap-2">
+      ${isEditable ? `
+        <button onclick="editOrder('${order.OrderID}')" class="px-3 py-2 text-xs font-medium text-surface-700 bg-white border border-surface-200 rounded-xl hover:bg-surface-50 transition-colors">
+          Edit
+        </button>
+        <button onclick="changeStatus('${order.OrderID}', 'In Progress')" class="px-3 py-2 text-xs font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition-colors">
+          Mark In Progress
+        </button>
+        <button onclick="changeStatus('${order.OrderID}', 'Completed')" class="px-3 py-2 text-xs font-medium text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-xl hover:bg-emerald-100 transition-colors">
+          Mark Completed
+        </button>
+        <button onclick="changeStatus('${order.OrderID}', 'Cancelled')" class="px-3 py-2 text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-xl hover:bg-red-100 transition-colors">
+          Cancel
+        </button>
+      ` : ""}
+      <button onclick="exportWorkOrderPDF()" class="px-3 py-2 text-xs font-medium text-surface-600 bg-surface-50 border border-surface-200 rounded-xl hover:bg-surface-100 transition-colors ml-auto">
+        Export PDF
+      </button>
+      <button onclick="confirmDeleteOrder('${order.OrderID}')" class="px-3 py-2 text-xs font-medium text-red-500 hover:text-red-600 transition-colors">
+        Delete
+      </button>
+    </div>
+  `;
 }
 
 // ========================================
-// New / Edit Order Modal
+// Order Actions (Optimistic)
 // ========================================
 
-function resetForm() {
-  document.getElementById("form-order-id").value = "";
-  document.getElementById("form-requester").value = "";
-  document.getElementById("form-purpose").value = "";
-  document.getElementById("form-notes").value = "";
-  document.getElementById("btn-submit-order").textContent = "Create Order";
-  setDefaultDate();
-  populateDepartments();
-  document.getElementById("items-container").innerHTML = "";
-  document.getElementById("items-error").classList.add("hidden");
-  addItemRow();
-}
+function changeStatus(orderId, newStatus) {
+  const oldOrder = allOrders.find(o => o.OrderID === orderId);
+  const oldStatus = oldOrder ? oldOrder.Status : null;
 
-async function editOrder(orderId) {
-  closeDrawer();
+  // Optimistic update
+  if (oldOrder) oldOrder.Status = newStatus;
+  if (currentOrder && currentOrder.OrderID === orderId) {
+    currentOrder.Status = newStatus;
+    renderDrawer(currentOrder);
+  }
+  renderOrdersTable();
 
-  const order = allOrders.find(o => o.OrderID === orderId);
-
-  if (!order) return;
-
-  document.getElementById("form-order-id").value = order.OrderID;
-  document.getElementById("form-date").value = order.Date;
-  document.getElementById("form-requester").value = order.RequesterName;
-  document.getElementById("form-purpose").value = order.Purpose || "";
-  document.getElementById("form-notes").value = order.Notes || "";
-  populateDepartments();
-  document.getElementById("form-department").value = order.Department;
-  document.getElementById("btn-submit-order").textContent = "Update Order";
-
-  const container = document.getElementById("items-container");
-  container.innerHTML = "";
-  (order.Items || []).forEach(item => addItemRow(item));
-  if ((order.Items || []).length === 0) addItemRow();
-
-  document.getElementById("items-error").classList.add("hidden");
-
-  // Scroll to form on mobile
-  document.getElementById("form-date").scrollIntoView({ behavior: "smooth", block: "center" });
-  showToast("Editing order " + orderId, "info");
-}
-
-function populateDepartments() {
-  const select = document.getElementById("form-department");
-  const current = select.value;
-  select.innerHTML = '<option value="">Select department</option>';
-  CONFIG.DEPARTMENTS.forEach(dept => {
-    select.innerHTML += `<option value="${dept}" ${dept === current ? "selected" : ""}>${dept}</option>`;
+  ApiService.updateOrderStatus(orderId, newStatus).then(res => {
+    if (!res.success) {
+      // Rollback
+      if (oldOrder) oldOrder.Status = oldStatus;
+      if (currentOrder && currentOrder.OrderID === orderId) {
+        currentOrder.Status = oldStatus;
+        renderDrawer(currentOrder);
+      }
+      renderOrdersTable();
+      showToast(res.message || "Failed to update status", "error");
+    } else {
+      showToast("Status updated to " + newStatus, "success");
+    }
   });
 }
 
-function addItemRow(item = null) {
+function confirmDeleteOrder(orderId) {
+  showConfirm(
+    "Delete Order",
+    "This will permanently delete order " + orderId + ". Continue?",
+    () => {
+      ApiService.deleteOrder(orderId).then(res => {
+        if (res.success) {
+          allOrders = allOrders.filter(o => o.OrderID !== orderId);
+          renderOrdersTable();
+          closeDrawer();
+          showToast("Order deleted", "success");
+          loadDashboard();
+        } else {
+          showToast(res.message || "Failed to delete", "error");
+        }
+      });
+    }
+  );
+}
+
+// ========================================
+// Create / Edit Order
+// ========================================
+
+function addItemRow() {
   const container = document.getElementById("items-container");
   const row = document.createElement("div");
-  row.className = "item-row bg-surface-50 rounded-xl p-3 border border-surface-100";
-
+  row.className = "item-row";
   row.innerHTML = `
-    <div>
-      <input type="text" value="${item ? item.ItemName : ""}" class="w-full px-2.5 py-2 text-sm bg-white border border-surface-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500/20 item-name" placeholder="Item name">
-    </div>
-    <input type="number" value="${item ? item.Quantity : ""}" min="1" class="w-full px-2.5 py-2 text-sm bg-white border border-surface-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500/20 item-qty" placeholder="Qty">
-    <select class="w-full px-2.5 py-2 text-sm bg-white border border-surface-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500/20 item-unit">
-      ${CONFIG.UNITS.map(u => `<option value="${u}" ${item && item.Unit === u ? "selected" : ""}>${u}</option>`).join("")}
+    <input type="text" placeholder="Item name" required class="item-name px-3 py-2.5 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
+    <input type="number" placeholder="Qty" min="1" value="1" required class="item-qty px-3 py-2.5 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
+    <select class="item-unit px-3 py-2.5 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400">
+      ${CONFIG.UNITS.map(u => `<option value="${u}">${u}</option>`).join("")}
     </select>
-    <input type="text" value="${item ? item.Notes || "" : ""}" class="w-full px-2.5 py-2 text-sm bg-white border border-surface-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500/20 item-notes" placeholder="Notes (optional)">
-    <button type="button" onclick="removeItemRow(this)" class="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-red-50 text-surface-400 hover:text-red-500 transition-colors">
+    <input type="text" placeholder="Notes (optional)" class="item-notes px-3 py-2.5 text-sm bg-surface-50 border border-surface-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
+    <button type="button" onclick="this.parentElement.remove()" class="w-9 h-9 flex items-center justify-center text-surface-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shrink-0">
       <i data-lucide="trash-2" class="w-4 h-4"></i>
     </button>
   `;
-
   container.appendChild(row);
   lucide.createIcons();
 }
 
-function removeItemRow(btn) {
-  const container = document.getElementById("items-container");
-  if (container.children.length > 1) {
-    btn.closest(".item-row").remove();
-  }
-}
-
-function getFormItems() {
-  const rows = document.querySelectorAll("#items-container .item-row");
+function getFormData() {
   const items = [];
-
-  rows.forEach(row => {
-    let name;
-    const select = row.querySelector(".item-name");
-    if (select && select.tagName === "SELECT") {
-      if (select.value === "__custom__") {
-        name = row.querySelector(".item-custom-name").value.trim();
-      } else {
-        name = select.value;
-      }
-    } else {
-      name = (row.querySelector(".item-name") || {}).value || "";
-      name = name.trim();
-    }
-
-    const qty = parseInt(row.querySelector(".item-qty").value) || 0;
-    const unit = row.querySelector(".item-unit").value;
-    const notes = row.querySelector(".item-notes").value.trim();
-
-    if (name && qty > 0) {
-      items.push({ itemName: name, quantity: qty, unit, notes });
+  document.querySelectorAll("#items-container .item-row").forEach(row => {
+    const name = row.querySelector(".item-name").value.trim();
+    if (name) {
+      items.push({
+        itemName: name,
+        quantity: parseInt(row.querySelector(".item-qty").value) || 1,
+        unit: row.querySelector(".item-unit").value,
+        notes: row.querySelector(".item-notes").value.trim()
+      });
     }
   });
 
-  return items;
+  return {
+    date: document.getElementById("form-date").value,
+    requesterName: document.getElementById("form-requester").value.trim(),
+    department: document.getElementById("form-department").value,
+    purpose: document.getElementById("form-purpose").value.trim(),
+    notes: document.getElementById("form-notes").value.trim(),
+    items
+  };
 }
 
-async function submitOrder() {
-  const orderId = document.getElementById("form-order-id").value;
-  const date = document.getElementById("form-date").value;
-  const requester = document.getElementById("form-requester").value.trim();
-  const department = document.getElementById("form-department").value;
-  const purpose = document.getElementById("form-purpose").value.trim();
-  const notes = document.getElementById("form-notes").value.trim();
-  const items = getFormItems();
+function submitOrder() {
+  const data = getFormData();
 
-  // Validation
-  if (!date || !requester || !department || !purpose) {
+  if (!data.requesterName || !data.department) {
     showToast("Please fill in all required fields", "error");
     return;
   }
-  if (items.length === 0) {
+  if (data.items.length === 0) {
     document.getElementById("items-error").classList.remove("hidden");
-    showToast("Please add at least one item", "error");
     return;
   }
   document.getElementById("items-error").classList.add("hidden");
 
-  const orderData = { date, requesterName: requester, department, purpose, notes, items };
+  const btn = document.getElementById("btn-submit-order");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Saving...';
 
-  if (useMockData) {
-    if (orderId) {
-      // Edit mock
-      const idx = allOrders.findIndex(o => o.OrderID === orderId);
-      if (idx !== -1) {
-        allOrders[idx] = { ...allOrders[idx], ...orderData, Items: items, ItemCount: items.length };
-        filteredOrders = [...allOrders];
-        renderOrdersTable();
-        showToast("Order updated successfully", "success");
+  const isEditing = !!editingOrderId;
+  const apiCall = isEditing
+    ? ApiService.updateOrder({ orderId: editingOrderId, ...data })
+    : ApiService.createOrder(data);
+
+  apiCall.then(res => {
+    btn.disabled = false;
+    btn.textContent = isEditing ? "Update Order" : "Create Order";
+
+    if (res.success) {
+      showToast(isEditing ? "Order updated" : "Order created successfully", "success");
+      resetForm();
+      loadDashboard();
+      if (document.getElementById("page-orders").classList.contains("hidden") === false) {
+        loadOrders();
       }
     } else {
-      // Create mock
-      const newId = generateMockOrderId();
-      const newOrder = {
-        OrderID: newId,
-        ...orderData,
-        Status: "Pending",
-        CreatedAt: new Date().toISOString(),
-        CompletedAt: "",
-        ItemCount: items.length,
-        Items: items
-      };
-      allOrders.unshift(newOrder);
-      filteredOrders = [...allOrders];
-      renderOrdersTable();
-      showToast("Order created: " + newId, "success");
+      showToast(res.message || "Failed to save order", "error");
     }
-    resetForm();
-    return;
-  }
+  });
+}
 
-  let res;
-  if (orderId) {
-    res = await API.updateOrder({ orderId, ...orderData });
-    if (res.success) {
-      const idx = allOrders.findIndex(o => o.OrderID === orderId);
-      if (idx !== -1) {
-        allOrders[idx] = { ...allOrders[idx], ...orderData, Items: items, ItemCount: items.length };
-      }
-    }
-  } else {
-    res = await API.createOrder(orderData);
-    if (res.success) {
-      const newOrder = {
-        OrderID: res.data.orderId,
-        ...orderData,
-        Status: "Pending",
-        CreatedAt: new Date().toISOString(),
-        CompletedAt: "",
-        ItemCount: items.length,
-        Items: items
-      };
-      allOrders.unshift(newOrder);
-    }
-  }
+function editOrder(orderId) {
+  const order = allOrders.find(o => o.OrderID === orderId) || currentOrder;
+  if (!order) return;
 
-  if (res.success) {
-    filteredOrders = [...allOrders];
-    renderOrdersTable();
-    renderDashboardStats({
-      totalOrders: allOrders.length,
-      pendingOrders: allOrders.filter(o => o.Status === "Pending").length,
-      completedOrders: allOrders.filter(o => o.Status === "Completed").length,
-      ordersThisMonth: allOrders.filter(o => { const d = new Date(o.Date); const n = new Date(); return d.getMonth() === n.getMonth() && d.getFullYear() === n.getFullYear(); }).length
+  editingOrderId = orderId;
+  closeDrawer();
+
+  navigateTo("dashboard");
+
+  setTimeout(() => {
+    document.getElementById("form-order-id").value = orderId;
+    document.getElementById("form-date").value = order.Date || "";
+    document.getElementById("form-requester").value = order.RequesterName || "";
+    document.getElementById("form-department").value = order.Department || "";
+    document.getElementById("form-purpose").value = order.Purpose || "";
+    document.getElementById("form-notes").value = order.Notes || "";
+
+    const container = document.getElementById("items-container");
+    container.innerHTML = "";
+    (order.Items || []).forEach(it => {
+      addItemRow();
+      const rows = container.querySelectorAll(".item-row");
+      const lastRow = rows[rows.length - 1];
+      lastRow.querySelector(".item-name").value = it.ItemName || "";
+      lastRow.querySelector(".item-qty").value = it.Quantity || 1;
+      lastRow.querySelector(".item-unit").value = it.Unit || "pcs";
+      lastRow.querySelector(".item-notes").value = it.Notes || "";
     });
-    showToast(orderId ? "Order updated" : "Order created: " + res.data.orderId, "success");
-    resetForm();
-  } else {
-    showToast(res.message || "Failed to save order", "error");
-  }
+
+    document.getElementById("btn-submit-order").textContent = "Update Order";
+    document.getElementById("btn-submit-order").scrollIntoView({ behavior: "smooth" });
+  }, 350);
 }
 
-function generateMockOrderId() {
-  const today = new Date();
-  const dateStr = today.toISOString().split("T")[0].replace(/-/g, "");
-  const prefix = "WO-" + dateStr + "-";
-  const existing = allOrders.filter(o => o.OrderID.startsWith(prefix));
-  const num = existing.length + 1;
-  return prefix + String(num).padStart(3, "0");
-}
-
-// ========================================
-// Status Management
-// ========================================
-
-async function markCompleted(orderId) {
-  showConfirm(
-    "Mark as Completed",
-    "This order will be marked as completed. Continue?",
-    async () => {
-      const res = await API.updateOrderStatus(orderId, "Completed");
-      if (res.success) {
-        const order = allOrders.find(o => o.OrderID === orderId);
-        if (order) {
-          order.Status = "Completed";
-          order.CompletedAt = new Date().toISOString();
-        }
-        filteredOrders = [...allOrders];
-        renderOrdersTable();
-        currentDetailOrder = order;
-        renderDrawerContent();
-        showToast("Order completed", "success");
-      } else {
-        showToast(res.message || "Failed to update status", "error");
-      }
-    }
-  );
-}
-
-async function cancelOrder(orderId) {
-  showConfirm(
-    "Cancel Order",
-    "This order will be cancelled. Continue?",
-    async () => {
-      const res = await API.updateOrderStatus(orderId, "Cancelled");
-      if (res.success) {
-        const order = allOrders.find(o => o.OrderID === orderId);
-        if (order) {
-          order.Status = "Cancelled";
-        }
-        filteredOrders = [...allOrders];
-        renderOrdersTable();
-        currentDetailOrder = order;
-        renderDrawerContent();
-        showToast("Order cancelled", "info");
-      } else {
-        showToast(res.message || "Failed to cancel order", "error");
-      }
-    }
-  );
-}
-
-async function deleteOrder(orderId) {
-  showConfirm(
-    "Delete Order",
-    "This order will be permanently deleted. Continue?",
-    async () => {
-      const res = await API.deleteOrder(orderId);
-      if (res.success) {
-        allOrders = allOrders.filter(o => o.OrderID !== orderId);
-        filteredOrders = [...allOrders];
-        renderOrdersTable();
-        closeDrawer();
-        showToast("Order deleted", "info");
-      } else {
-        showToast(res.message || "Failed to delete order", "error");
-      }
-    }
-  );
+function resetForm() {
+  editingOrderId = null;
+  document.getElementById("form-order-id").value = "";
+  document.getElementById("form-date").value = new Date().toISOString().slice(0, 10);
+  document.getElementById("form-requester").value = "";
+  document.getElementById("form-department").value = "";
+  document.getElementById("form-purpose").value = "";
+  document.getElementById("form-notes").value = "";
+  document.getElementById("items-container").innerHTML = "";
+  document.getElementById("items-error").classList.add("hidden");
+  document.getElementById("btn-submit-order").textContent = "Create Order";
+  addItemRow();
 }
 
 // ========================================
-// Export Functions
+// Excel Export
 // ========================================
 
 function exportExcel() {
-  const data = filteredOrders.length > 0 ? filteredOrders : allOrders;
-  if (data.length === 0) {
-    showToast("No data to export", "error");
-    return;
-  }
+  showToast("Generating Excel...", "info");
 
-  if (typeof XLSX === "undefined") {
-    showToast("XLSX library not loaded. Please refresh.", "error");
-    return;
-  }
+  ApiService.exportExcel(currentFilters).then(res => {
+    if (!res.success) {
+      showToast(res.message || "Export failed", "error");
+      return;
+    }
 
-  // Sheet 1: Orders summary
-  const ordersRows = [];
-  ordersRows.push(["Order ID", "Date", "Requester Name", "Department", "Purpose", "Notes", "Status", "Items Count", "Created At", "Completed At"]);
+    const byteString = atob(res.data);
+    const ab = new ArrayBuffer(byteString.length);
+    const ia = new Uint8Array(ab);
+    for (let i = 0; i < byteString.length; i++) {
+      ia[i] = byteString.charCodeAt(i);
+    }
+    const blob = new Blob([ab], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
 
-  data.forEach(o => {
-    ordersRows.push([
-      o.OrderID,
-      o.Date,
-      o.RequesterName,
-      o.Department,
-      o.Purpose || "",
-      o.Notes || "",
-      o.Status,
-      (o.Items || []).length,
-      formatDateTime(o.CreatedAt),
-      o.CompletedAt ? formatDateTime(o.CompletedAt) : ""
-    ]);
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = res.filename || "work_orders.xlsx";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
+
+    showToast("Excel downloaded", "success");
   });
-
-  // Sheet 2: Items detail
-  const itemsRows = [];
-  itemsRows.push(["Order ID", "Item Name", "Quantity", "Unit", "Notes"]);
-
-  data.forEach(o => {
-    (o.Items || []).forEach(item => {
-      itemsRows.push([
-        o.OrderID,
-        item.ItemName,
-        item.Quantity,
-        item.Unit,
-        item.Notes || ""
-      ]);
-    });
-  });
-
-  const wb = XLSX.utils.book_new();
-
-  const ws1 = XLSX.utils.aoa_to_sheet(ordersRows);
-  // Column widths
-  ws1["!cols"] = [
-    { wch: 22 }, // Order ID
-    { wch: 12 }, // Date
-    { wch: 20 }, // Requester
-    { wch: 18 }, // Department
-    { wch: 30 }, // Purpose
-    { wch: 25 }, // Notes
-    { wch: 14 }, // Status
-    { wch: 10 }, // Items Count
-    { wch: 20 }, // Created At
-    { wch: 20 }  // Completed At
-  ];
-  XLSX.utils.book_append_sheet(wb, ws1, "Orders");
-
-  const ws2 = XLSX.utils.aoa_to_sheet(itemsRows);
-  ws2["!cols"] = [
-    { wch: 22 }, // Order ID
-    { wch: 25 }, // Item Name
-    { wch: 10 }, // Quantity
-    { wch: 10 }, // Unit
-    { wch: 30 }  // Notes
-  ];
-  XLSX.utils.book_append_sheet(wb, ws2, "Order Items");
-
-  const fileName = "work-orders-" + new Date().toISOString().split("T")[0] + ".xlsx";
-  XLSX.writeFile(wb, fileName);
-  showToast("Exported " + data.length + " orders to Excel", "success");
 }
 
-function exportWorkOrder(orderId) {
-  let order;
-  if (useMockData) {
-    order = allOrders.find(o => o.OrderID === orderId);
-  } else {
-    order = currentDetailOrder;
-  }
+// ========================================
+// PDF Export (Print-friendly)
+// ========================================
 
-  if (!order) {
-    showToast("Order not found", "error");
-    return;
-  }
+function exportWorkOrderPDF() {
+  if (!currentOrder) return;
+  const o = currentOrder;
 
-  const items = order.Items || [];
-
-  const statusColors = {
-    "Pending": { bg: "#fef3c7", text: "#92400e", border: "#fcd34d" },
-    "In Progress": { bg: "#dbeafe", text: "#1e40af", border: "#93c5fd" },
-    "Completed": { bg: "#d1fae5", text: "#065f46", border: "#6ee7b7" },
-    "Cancelled": { bg: "#fee2e2", text: "#991b1b", border: "#fca5a5" }
-  };
-  const sc = statusColors[order.Status] || statusColors["Pending"];
-
-  const html = `
+  const printWindow = window.open("", "_blank");
+  printWindow.document.write(`
     <!DOCTYPE html>
-    <html lang="en">
+    <html>
     <head>
-      <meta charset="UTF-8">
-      <title>Work Order ${order.OrderID}</title>
+      <title>Work Order ${o.OrderID}</title>
       <style>
-        @page { margin: 15mm; size: A4; }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-          color: #1e293b;
-          background: #fff;
-          padding: 32px 40px;
-          font-size: 13px;
-          line-height: 1.5;
-        }
-
-        /* Header */
-        .doc-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          padding-bottom: 16px;
-          border-bottom: 3px solid #0d9488;
-          margin-bottom: 24px;
-        }
-        .doc-header-left .company-name {
-          font-size: 22px;
-          font-weight: 800;
-          color: #0d9488;
-          letter-spacing: -0.02em;
-        }
-        .doc-header-left .company-sub {
-          font-size: 11px;
-          color: #94a3b8;
-          margin-top: 2px;
-        }
-        .doc-header-right {
-          text-align: right;
-        }
-        .doc-header-right .doc-type {
-          font-size: 18px;
-          font-weight: 700;
-          color: #334155;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-        }
-        .doc-header-right .doc-id {
-          font-size: 14px;
-          font-weight: 700;
-          color: #0d9488;
-          margin-top: 4px;
-        }
-
-        /* Section */
-        .section {
-          margin-bottom: 20px;
-        }
-        .section-title {
-          font-size: 11px;
-          font-weight: 700;
-          color: #94a3b8;
-          text-transform: uppercase;
-          letter-spacing: 0.08em;
-          margin-bottom: 10px;
-          padding-bottom: 4px;
-          border-bottom: 1px solid #e2e8f0;
-        }
-
-        /* Info Grid - like a real form */
-        .info-table {
-          width: 100%;
-          border-collapse: collapse;
-        }
-        .info-table td {
-          padding: 8px 12px;
-          border: 1px solid #e2e8f0;
-          font-size: 12px;
-        }
-        .info-table .label-cell {
-          background: #f8fafc;
-          font-weight: 600;
-          color: #64748b;
-          width: 140px;
-          text-transform: uppercase;
-          font-size: 10px;
-          letter-spacing: 0.04em;
-        }
-        .info-table .value-cell {
-          color: #1e293b;
-          font-weight: 500;
-        }
-
-        /* Status Badge */
-        .status-badge {
-          display: inline-block;
-          padding: 3px 12px;
-          border-radius: 9999px;
-          font-size: 11px;
-          font-weight: 700;
-          letter-spacing: 0.02em;
-          background: ${sc.bg};
-          color: ${sc.text};
-          border: 1px solid ${sc.border};
-        }
-
-        /* Items Table */
-        .items-table {
-          width: 100%;
-          border-collapse: collapse;
-          margin-top: 2px;
-        }
-        .items-table thead th {
-          background: #0d9488;
-          color: #fff;
-          padding: 8px 12px;
-          font-size: 10px;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.06em;
-          text-align: left;
-          border: 1px solid #0b7a6e;
-        }
-        .items-table thead th.center { text-align: center; }
-        .items-table tbody td {
-          padding: 8px 12px;
-          border: 1px solid #e2e8f0;
-          font-size: 12px;
-          color: #334155;
-        }
-        .items-table tbody td.center { text-align: center; }
-        .items-table tbody tr:nth-child(even) {
-          background: #f8fafc;
-        }
-        .items-table tbody tr:hover {
-          background: #f0fdfa;
-        }
-        .items-table .row-num {
-          width: 40px;
-          text-align: center;
-          font-weight: 600;
-          color: #94a3b8;
-        }
-        .items-table .qty-col { width: 70px; }
-        .items-table .unit-col { width: 80px; }
-
-        /* Summary row */
-        .items-table tfoot td {
-          padding: 8px 12px;
-          border: 1px solid #e2e8f0;
-          font-weight: 700;
-          font-size: 12px;
-          background: #f1f5f9;
-          color: #334155;
-        }
-
-        /* Purpose & Notes */
-        .text-box {
-          background: #f8fafc;
-          border: 1px solid #e2e8f0;
-          border-radius: 6px;
-          padding: 10px 14px;
-          font-size: 12px;
-          color: #334155;
-          line-height: 1.6;
-          white-space: pre-wrap;
-        }
-
-        /* Signatures */
-        .sig-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr 1fr;
-          gap: 32px;
-          margin-top: 40px;
-          padding-top: 16px;
-        }
-        .sig-block {
-          text-align: center;
-        }
-        .sig-line {
-          border-top: 1px solid #94a3b8;
-          margin-top: 50px;
-          padding-top: 6px;
-        }
-        .sig-label {
-          font-size: 10px;
-          font-weight: 600;
-          color: #94a3b8;
-          text-transform: uppercase;
-          letter-spacing: 0.04em;
-        }
-
-        /* Footer */
-        .doc-footer {
-          margin-top: 32px;
-          padding-top: 12px;
-          border-top: 1px solid #e2e8f0;
-          display: flex;
-          justify-content: space-between;
-          font-size: 10px;
-          color: #94a3b8;
-        }
-
-        @media print {
-          body { padding: 0; }
-          .no-print { display: none !important; }
-        }
+        body { font-family: Arial, sans-serif; padding: 40px; color: #333; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0d9488; padding-bottom: 16px; margin-bottom: 24px; }
+        .title { font-size: 20px; font-weight: bold; color: #115e59; }
+        .subtitle { font-size: 12px; color: #64748b; margin-top: 4px; }
+        .badge { display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 11px; font-weight: 600; }
+        .badge-pending { background: #fef3c7; color: #92400e; }
+        .badge-in-progress { background: #dbeafe; color: #1e40af; }
+        .badge-completed { background: #d1fae5; color: #065f46; }
+        .badge-cancelled { background: #fee2e2; color: #991b1b; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+        .label { font-size: 10px; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.05em; margin-bottom: 4px; }
+        .value { font-size: 13px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+        th { background: #0d9488; color: white; padding: 10px 12px; font-size: 11px; text-align: left; }
+        td { padding: 10px 12px; font-size: 12px; border-bottom: 1px solid #e2e8f0; }
+        tr:nth-child(even) td { background: #f8fafc; }
+        .notes { font-size: 12px; color: #475569; background: #f8fafc; padding: 12px; border-radius: 8px; }
+        .footer { margin-top: 32px; border-top: 1px solid #e2e8f0; padding-top: 16px; font-size: 10px; color: #94a3b8; text-align: center; }
+        @media print { body { padding: 20px; } }
       </style>
     </head>
     <body>
-
-      <!-- Header -->
-      <div class="doc-header">
-        <div class="doc-header-left">
-          <div class="company-name">${CONFIG.COMPANY_NAME}</div>
-          <div class="company-sub">Work Order Management System</div>
+      <div class="header">
+        <div>
+          <div class="title">Work Order</div>
+          <div class="subtitle">PT. RRA — Order Management System</div>
         </div>
-        <div class="doc-header-right">
-          <div class="doc-type">Work Order</div>
-          <div class="doc-id">${order.OrderID}</div>
+        <div style="text-align:right">
+          <div class="badge badge-${statusClass(o.Status)}">${o.Status}</div>
+          <div class="subtitle" style="margin-top:8px">${o.OrderID}</div>
         </div>
       </div>
-
-      <!-- Order Info -->
-      <div class="section">
-        <div class="section-title">Order Information</div>
-        <table class="info-table">
-          <tr>
-            <td class="label-cell">Requester Name</td>
-            <td class="value-cell">${order.RequesterName}</td>
-            <td class="label-cell">Department</td>
-            <td class="value-cell">${order.Department}</td>
-          </tr>
-          <tr>
-            <td class="label-cell">Order Date</td>
-            <td class="value-cell">${formatDate(order.Date)}</td>
-            <td class="label-cell">Status</td>
-            <td class="value-cell"><span class="status-badge">${order.Status}</span></td>
-          </tr>
-          <tr>
-            <td class="label-cell">Created At</td>
-            <td class="value-cell">${formatDateTime(order.CreatedAt)}</td>
-            <td class="label-cell">Completed At</td>
-            <td class="value-cell">${order.CompletedAt ? formatDateTime(order.CompletedAt) : "-"}</td>
-          </tr>
-        </table>
+      <div class="grid">
+        <div><div class="label">Order Date</div><div class="value">${formatDate(o.Date)}</div></div>
+        <div><div class="label">Requester</div><div class="value">${o.RequesterName}</div></div>
+        <div><div class="label">Department</div><div class="value">${o.Department}</div></div>
+        <div><div class="label">Purpose</div><div class="value">${o.Purpose || "-"}</div></div>
       </div>
-
-      <!-- Purpose -->
-      <div class="section">
-        <div class="section-title">Purpose</div>
-        <div class="text-box">${order.Purpose || "-"}</div>
-      </div>
-
-      ${order.Notes ? `
-      <!-- Notes -->
-      <div class="section">
-        <div class="section-title">Notes</div>
-        <div class="text-box">${order.Notes}</div>
-      </div>` : ""}
-
-      <!-- Items -->
-      <div class="section">
-        <div class="section-title">Items (${items.length} item${items.length !== 1 ? "s" : ""})</div>
-        <table class="items-table">
-          <thead>
-            <tr>
-              <th class="row-num">#</th>
-              <th>Item Name</th>
-              <th class="center qty-col">Quantity</th>
-              <th class="center unit-col">Unit</th>
-              <th>Notes</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${items.map((item, i) => `
-              <tr>
-                <td class="row-num">${i + 1}</td>
-                <td><strong>${item.ItemName}</strong></td>
-                <td class="center">${item.Quantity}</td>
-                <td class="center">${item.Unit}</td>
-                <td>${item.Notes || "-"}</td>
-              </tr>
-            `).join("")}
-          </tbody>
-        </table>
-      </div>
-
-      <!-- Signatures -->
-      <div class="sig-grid">
-        <div class="sig-block">
-          <div class="sig-line">
-            <div class="sig-label">Requested By</div>
-          </div>
-        </div>
-        <div class="sig-block">
-          <div class="sig-line">
-            <div class="sig-label">Approved By</div>
-          </div>
-        </div>
-        <div class="sig-block">
-          <div class="sig-line">
-            <div class="sig-label">Received By</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Footer -->
-      <div class="doc-footer">
-        <span>Printed: ${new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
-        <span>${CONFIG.COMPANY_NAME} &mdash; Work Order Management System</span>
-      </div>
-
-    </body>
-    </html>
-  `;
-
-  const printWindow = window.open("", "_blank");
-  printWindow.document.write(html);
+      <table>
+        <thead><tr><th>#</th><th>Item</th><th>Qty</th><th>Unit</th><th>Notes</th></tr></thead>
+        <tbody>
+          ${(o.Items || []).map((it, i) => `
+            <tr><td>${i + 1}</td><td>${it.ItemName}</td><td>${it.Quantity}</td><td>${it.Unit}</td><td>${it.Notes || ""}</td></tr>
+          `).join("")}
+        </tbody>
+      </table>
+      ${o.Notes ? `<div class="notes"><strong>Notes:</strong> ${o.Notes}</div>` : ""}
+      <div class="footer">Generated ${new Date().toLocaleDateString("id-ID")} &middot; Work Order Management System</div>
+    </body></html>
+  `);
   printWindow.document.close();
-  printWindow.focus();
-  setTimeout(() => printWindow.print(), 600);
-  showToast("Work order export ready", "success");
+  setTimeout(() => { printWindow.print(); }, 500);
 }
 
 // ========================================
-// UI Helpers
+// Helpers
 // ========================================
 
-function statusBadge(status) {
-  const cls = {
-    "Pending": "badge-pending",
-    "In Progress": "badge-in-progress",
-    "Completed": "badge-completed",
-    "Cancelled": "badge-cancelled"
-  };
-  return `<span class="badge ${cls[status] || "badge-pending"}">${status}</span>`;
+function statusClass(status) {
+  return { "Pending": "pending", "In Progress": "in-progress", "Completed": "completed", "Cancelled": "cancelled" }[status] || "pending";
+}
+function statusBg(status) {
+  return { "Pending": "bg-amber-100", "In Progress": "bg-blue-100", "Completed": "bg-emerald-100", "Cancelled": "bg-red-100" }[status] || "bg-surface-100";
+}
+function statusText(status) {
+  return { "Pending": "text-amber-600", "In Progress": "text-blue-600", "Completed": "text-emerald-600", "Cancelled": "text-red-600" }[status] || "text-surface-600";
 }
 
 function formatDate(dateStr) {
   if (!dateStr) return "-";
   const d = new Date(dateStr);
-  return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+  return d.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 function formatDateTime(dateStr) {
   if (!dateStr) return "-";
   const d = new Date(dateStr);
-  return d.toLocaleDateString("en-US", {
-    year: "numeric", month: "short", day: "numeric",
-    hour: "2-digit", minute: "2-digit"
-  });
+  return d.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+// --- Toast ---
 function showToast(message, type = "info") {
   const container = document.getElementById("toast-container");
-  const icons = {
-    success: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
-    error: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
-    info: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>'
-  };
-
+  const icons = { success: "check-circle", error: "alert-circle", info: "info" };
   const toast = document.createElement("div");
   toast.className = `toast toast-${type}`;
-  toast.innerHTML = `${icons[type] || icons.info}<span>${message}</span>`;
+  toast.innerHTML = `<i data-lucide="${icons[type] || "info"}" class="w-4 h-4 shrink-0"></i><span>${message}</span>`;
   container.appendChild(toast);
-
+  lucide.createIcons();
   setTimeout(() => {
     toast.classList.add("toast-exit");
     setTimeout(() => toast.remove(), 300);
-  }, 3500);
+  }, 3000);
 }
 
+// --- Confirm Dialog ---
+let confirmCallback = null;
 function showConfirm(title, message, onConfirm) {
-  const dialog = document.getElementById("confirm-dialog");
   document.getElementById("confirm-title").textContent = title;
   document.getElementById("confirm-message").textContent = message;
-  dialog.classList.remove("hidden");
-
-  const btn = document.getElementById("confirm-btn");
-  const newBtn = btn.cloneNode(true);
-  btn.parentNode.replaceChild(newBtn, btn);
-  newBtn.id = "confirm-btn";
-  newBtn.addEventListener("click", () => {
-    closeConfirm();
-    onConfirm();
-  });
+  document.getElementById("confirm-dialog").classList.remove("hidden");
+  confirmCallback = onConfirm;
 }
-
 function closeConfirm() {
   document.getElementById("confirm-dialog").classList.add("hidden");
+  confirmCallback = null;
 }
-
-function showLoading() {
-  // Can add global loading indicator if needed
-}
-
-function hideLoading() {
-  // Can remove global loading indicator if needed
-}
+document.getElementById("confirm-btn").addEventListener("click", () => {
+  if (confirmCallback) confirmCallback();
+  closeConfirm();
+});

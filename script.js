@@ -1326,7 +1326,7 @@ function exportWorkOrderPDF() {
         th, td { border: 1px solid #000; padding: 4px 6px; font-size: 9.5pt; vertical-align: middle; }
         th { text-align: center; font-weight: bold; }
         td.c { text-align: center; }
-        .sig { display: flex; justify-content: space-between; margin-top: 28px; page-break-inside: avoid; }
+        .sig { display: flex; justify-content: flex-end; margin-top: 28px; page-break-inside: avoid; }
         .sig-box { width: 30%; text-align: center; font-size: 10pt; }
         .sig-box .space { height: 70px; }
         .sig-box .name { border-top: 1px solid #000; display: inline-block; min-width: 160px; padding-top: 2px; }
@@ -1365,8 +1365,6 @@ function exportWorkOrderPDF() {
         </tbody>
       </table>
       <div class="sig">
-        <div class="sig-box"><div>Dibuat Oleh,</div><div class="space"></div><div class="name">( .................... )</div></div>
-        <div class="sig-box"><div>Diperiksa,</div><div class="space"></div><div class="name">( .................... )</div></div>
         <div class="sig-box"><div>Disetujui,</div><div class="space"></div><div class="name">( .................... )</div></div>
       </div>
       <div class="footer">Generated ${new Date().toLocaleDateString("id-ID")} &middot; Order Management System</div>

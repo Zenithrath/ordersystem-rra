@@ -14,6 +14,8 @@ let allOrdersTotalPages = 0;
 let currentOrder = null;
 let editingOrderId = null;
 let isLoadingOrders = false;
+let selectedOrders = new Set();
+let isSubmitting = false;
 
 const DEBOUNCE_MS = 350;
 
@@ -117,7 +119,7 @@ function renderRecentOrders(orders) {
       </div>
       <div class="text-right shrink-0 ml-3">
         <span class="badge badge-${statusClass(o.Status)}">${o.Status}</span>
-        <p class="text-[11px] text-surface-400 mt-1">${o.ItemCount || 0} items</p>
+        <p class="text-[11px] text-surface-400 mt-1 truncate max-w-[120px]" title="${o.ItemNames || ''}">${o.ItemNames || o.ItemCount + ' items'}</p>
       </div>
     </div>
   `,
@@ -136,13 +138,14 @@ function showOrdersSkeleton() {
     { length: 5 },
     () => `
     <tr>
+      <td class="px-5 py-4 w-10"><div class="skeleton h-4 w-4 rounded"></div></td>
       <td class="px-5 py-4"><div class="skeleton h-4 w-28 rounded"></div></td>
       <td class="px-5 py-4 hidden sm:table-cell"><div class="skeleton h-4 w-20 rounded"></div></td>
       <td class="px-5 py-4"><div class="skeleton h-4 w-24 rounded"></div></td>
       <td class="px-5 py-4 hidden md:table-cell"><div class="skeleton h-4 w-24 rounded"></div></td>
-      <td class="px-5 py-4 text-center"><div class="skeleton h-4 w-8 rounded mx-auto"></div></td>
+      <td class="px-5 py-4"><div class="skeleton h-4 w-32 rounded"></div></td>
       <td class="px-5 py-4 text-center"><div class="skeleton h-5 w-16 rounded-full mx-auto"></div></td>
-      <td class="px-5 py-4 text-right"><div class="skeleton h-4 w-16 rounded ml-auto"></div></td>
+      <td class="px-5 py-4 text-right"><div class="skeleton h-4 w-12 rounded ml-auto"></div></td>
     </tr>
   `,
   ).join("");
@@ -176,6 +179,7 @@ function loadOrders() {
 
     renderOrdersTable();
     renderPagination();
+    updateSelectedUI();
   });
 }
 
@@ -185,7 +189,7 @@ function renderOrdersTable() {
   if (!allOrders.length) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="7" class="px-5 py-12 text-center text-sm text-surface-400">
+        <td colspan="8" class="px-5 py-12 text-center text-sm text-surface-400">
           <i data-lucide="search" class="w-10 h-10 mx-auto mb-2 text-surface-300"></i>
           No orders found
         </td>
@@ -196,20 +200,26 @@ function renderOrdersTable() {
 
   tbody.innerHTML = allOrders
     .map(
-      (o) => `
-    <tr onclick="openOrderDetail('${o.OrderID}')">
-      <td class="px-5 py-4 text-sm font-medium text-surface-800">${o.OrderID}</td>
-      <td class="px-5 py-4 text-sm text-surface-500 hidden sm:table-cell">${formatDate(o.Date)}</td>
-      <td class="px-5 py-4">
+      (o) => {
+        const checked = selectedOrders.has(o.OrderID) ? "checked" : "";
+        const itemNames = o.ItemNames || (o.Items || []).map(it => it.ItemName).join(", ");
+        return `
+    <tr class="${selectedOrders.has(o.OrderID) ? 'bg-primary-50/50' : ''}">
+      <td class="px-5 py-4 w-10">
+        <input type="checkbox" value="${o.OrderID}" ${checked} onchange="toggleSelectOrder('${o.OrderID}', this)" class="w-4 h-4 rounded border-surface-300 text-primary-500 focus:ring-primary-500/20 cursor-pointer" />
+      </td>
+      <td class="px-5 py-4 text-sm font-medium text-surface-800 cursor-pointer" onclick="openOrderDetail('${o.OrderID}')">${o.OrderID}</td>
+      <td class="px-5 py-4 text-sm text-surface-500 hidden sm:table-cell cursor-pointer" onclick="openOrderDetail('${o.OrderID}')">${formatDate(o.Date)}</td>
+      <td class="px-5 py-4 cursor-pointer" onclick="openOrderDetail('${o.OrderID}')">
         <p class="text-sm text-surface-800">${o.RequesterName}</p>
       </td>
-      <td class="px-5 py-4 hidden md:table-cell">
+      <td class="px-5 py-4 hidden md:table-cell cursor-pointer" onclick="openOrderDetail('${o.OrderID}')">
         <p class="text-sm text-surface-500">${o.Department}</p>
       </td>
-      <td class="px-5 py-4 text-center">
-        <span class="text-sm text-surface-600">${o.ItemCount || 0}</span>
+      <td class="px-5 py-4 cursor-pointer" onclick="openOrderDetail('${o.OrderID}')">
+        <p class="text-sm text-surface-600 truncate max-w-[200px]" title="${itemNames}">${itemNames || "-"}</p>
       </td>
-      <td class="px-5 py-4 text-center">
+      <td class="px-5 py-4 text-center cursor-pointer" onclick="openOrderDetail('${o.OrderID}')">
         <span class="badge badge-${statusClass(o.Status)}">${o.Status}</span>
       </td>
       <td class="px-5 py-4 text-right">
@@ -218,7 +228,8 @@ function renderOrdersTable() {
         </button>
       </td>
     </tr>
-  `,
+    `;
+      },
     )
     .join("");
 }
@@ -279,6 +290,128 @@ function changePageSize(size) {
 }
 
 // ========================================
+// Selection & Bulk Export
+// ========================================
+
+function toggleSelectAll(cb) {
+  if (cb.checked) {
+    allOrders.forEach(o => selectedOrders.add(o.OrderID));
+  } else {
+    allOrders.forEach(o => selectedOrders.delete(o.OrderID));
+  }
+  renderOrdersTable();
+  updateSelectedUI();
+}
+
+function toggleSelectOrder(orderId, cb) {
+  if (cb.checked) {
+    selectedOrders.add(orderId);
+  } else {
+    selectedOrders.delete(orderId);
+  }
+  renderOrdersTable();
+  updateSelectedUI();
+}
+
+function updateSelectedUI() {
+  const count = selectedOrders.size;
+  const btnPdf = document.getElementById("btn-export-selected-pdf");
+  const btnExcel = document.getElementById("btn-export-selected-excel");
+
+  if (count > 0) {
+    btnPdf.classList.remove("hidden");
+    btnExcel.classList.remove("hidden");
+    document.getElementById("selected-count-pdf").textContent = count;
+    document.getElementById("selected-count-excel").textContent = count;
+  } else {
+    btnPdf.classList.add("hidden");
+    btnExcel.classList.add("hidden");
+  }
+
+  // Update select-all checkbox state
+  const selectAll = document.getElementById("select-all");
+  if (allOrders.length > 0 && count === allOrders.length) {
+    selectAll.checked = true;
+    selectAll.indeterminate = false;
+  } else if (count > 0) {
+    selectAll.indeterminate = true;
+  } else {
+    selectAll.checked = false;
+    selectAll.indeterminate = false;
+  }
+}
+
+function getSelectedOrders() {
+  if (selectedOrders.size === 0) return allOrders;
+  return allOrders.filter(o => selectedOrders.has(o.OrderID));
+}
+
+function exportSelectedExcel() {
+  const selected = getSelectedOrders();
+  if (selected.length === 0) { showToast("No orders selected", "info"); return; }
+  generateExcelFromData(selected);
+}
+
+function exportSelectedPDF() {
+  const selected = getSelectedOrders();
+  if (selected.length === 0) { showToast("No orders selected", "info"); return; }
+  generatePDFFromData(selected);
+}
+
+function generatePDFFromData(orders) {
+  if (!orders.length) return;
+
+  const printWindow = window.open("", "_blank");
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Work Orders</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; padding: 30px; color: #333; }
+        h1 { font-size: 18px; color: #115e59; margin-bottom: 4px; }
+        .subtitle { font-size: 11px; color: #64748b; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        th { background: #0d9488; color: white; padding: 8px 10px; font-size: 10px; text-align: left; }
+        td { padding: 8px 10px; font-size: 11px; border-bottom: 1px solid #e2e8f0; }
+        tr:nth-child(even) td { background: #f8fafc; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 9px; font-weight: 600; }
+        .badge-pending { background: #fef3c7; color: #92400e; }
+        .badge-in-progress { background: #dbeafe; color: #1e40af; }
+        .badge-completed { background: #d1fae5; color: #065f46; }
+        .badge-cancelled { background: #fee2e2; color: #991b1b; }
+        .items-cell { font-size: 10px; color: #475569; max-width: 200px; }
+        .footer { margin-top: 16px; font-size: 9px; color: #94a3b8; text-align: center; }
+        @media print { body { padding: 15px; } }
+      </style>
+    </head>
+    <body>
+      <h1>PT. RRA — Work Orders</h1>
+      <div class="subtitle">${orders.length} orders &middot; Generated ${new Date().toLocaleDateString("id-ID")}</div>
+      <table>
+        <thead><tr><th>Order ID</th><th>Date</th><th>Requester</th><th>Department</th><th>Items</th><th>Status</th></tr></thead>
+        <tbody>
+          ${orders.map(o => `
+            <tr>
+              <td>${o.OrderID}</td>
+              <td>${formatDate(o.Date)}</td>
+              <td>${o.RequesterName}</td>
+              <td>${o.Department}</td>
+              <td class="items-cell">${o.ItemNames || (o.Items || []).map(it => it.ItemName).join(", ") || "-"}</td>
+              <td><span class="badge badge-${statusClass(o.Status)}">${o.Status}</span></td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+      <div class="footer">Work Order Management System</div>
+    </body></html>
+  `);
+  printWindow.document.close();
+  setTimeout(() => printWindow.print(), 400);
+}
+
+// ========================================
 // Filters & Search
 // ========================================
 
@@ -321,6 +454,8 @@ function clearFilters() {
   currentFilters = {};
   currentSort = { field: "date", dir: "desc" };
   currentPage = 1;
+  selectedOrders.clear();
+  updateSelectedUI();
   loadOrders();
 }
 
@@ -579,6 +714,8 @@ function getFormData() {
 }
 
 function submitOrder() {
+  if (isSubmitting) return;
+
   const data = getFormData();
 
   if (!data.requesterName || !data.department) {
@@ -591,6 +728,7 @@ function submitOrder() {
   }
   document.getElementById("items-error").classList.add("hidden");
 
+  isSubmitting = true;
   const btn = document.getElementById("btn-submit-order");
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Saving...';
@@ -599,6 +737,7 @@ function submitOrder() {
   const apiCall = isEditing ? ApiService.updateOrder({ orderId: editingOrderId, ...data }) : ApiService.createOrder(data);
 
   apiCall.then((res) => {
+    isSubmitting = false;
     btn.disabled = false;
     btn.textContent = isEditing ? "Update Order" : "Create Order";
 
@@ -620,7 +759,13 @@ function editOrder(orderId) {
   if (!order) return;
 
   editingOrderId = orderId;
-  closeDrawer();
+
+  // Close drawer WITHOUT clearing editingOrderId
+  const drawer = document.getElementById("detail-drawer");
+  const panel = document.getElementById("drawer-panel");
+  drawer.classList.remove("open");
+  panel.classList.add("translate-x-full");
+  setTimeout(() => drawer.classList.add("hidden"), 300);
 
   navigateTo("dashboard");
 
@@ -646,7 +791,7 @@ function editOrder(orderId) {
 
     document.getElementById("btn-submit-order").textContent = "Update Order";
     document.getElementById("btn-submit-order").scrollIntoView({ behavior: "smooth" });
-  }, 350);
+  }, 400);
 }
 
 function resetForm() {
@@ -669,140 +814,143 @@ function resetForm() {
 
 function exportExcel() {
   showToast("Generating Excel...", "info");
+  // Export currently filtered/paginated data from local state
+  generateExcelFromData(allOrders);
+}
 
-  ApiService.exportExcel(currentFilters).then((res) => {
-    if (!res.success || !res.data) {
-      showToast(res.message || "Export failed", "error");
-      return;
-    }
+function generateExcelFromData(orders) {
+  if (!orders.length) {
+    showToast("No data to export", "info");
+    return;
+  }
 
-    const rows = res.data;
-    if (rows.length === 0) {
-      showToast("No data to export", "info");
-      return;
-    }
+  const rows = orders.map(o => ({
+    "Order ID": o.OrderID,
+    "Date": o.Date,
+    "Requester": o.RequesterName,
+    "Department": o.Department,
+    "Purpose": o.Purpose || "",
+    "Items": o.ItemNames || (o.Items || []).map(it => it.ItemName + " (" + it.Quantity + " " + it.Unit + ")").join(", "),
+    "Status": o.Status,
+    "Notes": o.Notes || ""
+  }));
 
-    const wb = XLSX.utils.book_new();
-    const headers = ["Order ID", "Date", "Requester", "Department", "Purpose", "Items", "Status", "Notes"];
+  const wb = XLSX.utils.book_new();
+  const headers = ["Order ID", "Date", "Requester", "Department", "Purpose", "Items", "Status", "Notes"];
 
-    const thinBorder = {
-      top: { style: "thin", color: { rgb: "E2E8F0" } },
-      bottom: { style: "thin", color: { rgb: "E2E8F0" } },
-      left: { style: "thin", color: { rgb: "E2E8F0" } },
-      right: { style: "thin", color: { rgb: "E2E8F0" } },
+  const thinBorder = {
+    top: { style: "thin", color: { rgb: "E2E8F0" } },
+    bottom: { style: "thin", color: { rgb: "E2E8F0" } },
+    left: { style: "thin", color: { rgb: "E2E8F0" } },
+    right: { style: "thin", color: { rgb: "E2E8F0" } },
+  };
+
+  const headerBorder = {
+    top: { style: "thin", color: { rgb: "0F766E" } },
+    bottom: { style: "thin", color: { rgb: "0F766E" } },
+    left: { style: "thin", color: { rgb: "0F766E" } },
+    right: { style: "thin", color: { rgb: "0F766E" } },
+  };
+
+  const statusStyles = {
+    "Pending":     { fg: "FEF3C7", fc: "92400E" },
+    "In Progress": { fg: "DBEAFE", fc: "1E40AF" },
+    "Completed":   { fg: "D1FAE5", fc: "065F46" },
+    "Cancelled":   { fg: "FEE2E2", fc: "991B1B" },
+  };
+
+  const ws = XLSX.utils.aoa_to_sheet([headers]);
+  ws["!cols"] = [
+    { wch: 18 }, { wch: 12 }, { wch: 18 }, { wch: 16 },
+    { wch: 22 }, { wch: 40 }, { wch: 12 }, { wch: 22 },
+  ];
+
+  headers.forEach((_, ci) => {
+    const addr = XLSX.utils.encode_cell({ r: 0, c: ci });
+    ws[addr].s = {
+      fill: { fgColor: { rgb: "0D9488" } },
+      font: { bold: true, color: { rgb: "FFFFFF" }, sz: 10 },
+      alignment: { horizontal: "center" },
+      border: headerBorder,
     };
-
-    const headerBorder = {
-      top: { style: "thin", color: { rgb: "0F766E" } },
-      bottom: { style: "thin", color: { rgb: "0F766E" } },
-      left: { style: "thin", color: { rgb: "0F766E" } },
-      right: { style: "thin", color: { rgb: "0F766E" } },
-    };
-
-    const statusStyles = {
-      "Pending":     { fg: "FEF3C7", fc: "92400E" },
-      "In Progress": { fg: "DBEAFE", fc: "1E40AF" },
-      "Completed":   { fg: "D1FAE5", fc: "065F46" },
-      "Cancelled":   { fg: "FEE2E2", fc: "991B1B" },
-    };
-
-    // --- Work Orders sheet ---
-    const ws = XLSX.utils.aoa_to_sheet([headers]);
-    ws["!cols"] = [
-      { wch: 18 }, { wch: 12 }, { wch: 18 }, { wch: 16 },
-      { wch: 22 }, { wch: 40 }, { wch: 12 }, { wch: 22 },
-    ];
-
-    // Style header row
-    headers.forEach((_, ci) => {
-      const addr = XLSX.utils.encode_cell({ r: 0, c: ci });
-      ws[addr].s = {
-        fill: { fgColor: { rgb: "0D9488" } },
-        font: { bold: true, color: { rgb: "FFFFFF" }, sz: 10 },
-        alignment: { horizontal: "center" },
-        border: headerBorder,
-      };
-    });
-
-    // Add data rows with styling
-    rows.forEach((r, ri) => {
-      const rowNum = ri + 1;
-      const vals = [r["Order ID"], r["Date"], r["Requester"], r["Department"], r["Purpose"], r["Items"], r["Status"], r["Notes"]];
-      vals.forEach((v, ci) => {
-        const addr = XLSX.utils.encode_cell({ r: rowNum, c: ci });
-        ws[addr] = { v: v || "", t: "s" };
-
-        const cellStyle = {
-          border: thinBorder,
-          alignment: { wrapText: ci === 5 || ci === 7 },
-        };
-
-        if (ri % 2 === 0) {
-          cellStyle.fill = { fgColor: { rgb: "F0FDF4" } };
-        }
-
-        if (ci === 6) {
-          const sc = statusStyles[v];
-          if (sc) {
-            cellStyle.fill = { fgColor: { rgb: sc.fg } };
-            cellStyle.font = { color: { rgb: sc.fc }, bold: true, sz: 10 };
-          }
-        }
-
-        ws[addr].s = cellStyle;
-      });
-    });
-
-    ws["!ref"] = XLSX.utils.encode_range({ s: { c: 0, r: 0 }, e: { c: 7, r: rows.length } });
-    XLSX.utils.book_append_sheet(wb, ws, "Work Orders");
-
-    // --- Summary sheet ---
-    const statusCounts = {};
-    const deptCounts = {};
-    rows.forEach((r) => {
-      statusCounts[r.Status] = (statusCounts[r.Status] || 0) + 1;
-      deptCounts[r.Department] = (deptCounts[r.Department] || 0) + 1;
-    });
-
-    const summaryData = [
-      ["Metric", "Value"],
-      ["Total Orders", rows.length],
-      ["Pending", statusCounts["Pending"] || 0],
-      ["In Progress", statusCounts["In Progress"] || 0],
-      ["Completed", statusCounts["Completed"] || 0],
-      ["Cancelled", statusCounts["Cancelled"] || 0],
-      ["", ""],
-      ["Department Breakdown", ""],
-    ];
-    Object.keys(deptCounts).sort().forEach((dept) => {
-      summaryData.push([dept, deptCounts[dept]]);
-    });
-
-    const ws2 = XLSX.utils.aoa_to_sheet(summaryData);
-    ws2["!cols"] = [{ wch: 22 }, { wch: 12 }];
-
-    // Style summary header
-    ["A1", "B1"].forEach((addr) => {
-      if (ws2[addr]) ws2[addr].s = {
-        fill: { fgColor: { rgb: "0D9488" } },
-        font: { bold: true, color: { rgb: "FFFFFF" }, sz: 10 },
-        border: headerBorder,
-      };
-    });
-
-    for (let ri = 1; ri < summaryData.length; ri++) {
-      for (let ci = 0; ci < 2; ci++) {
-        const addr = XLSX.utils.encode_cell({ r: ri, c: ci });
-        if (ws2[addr]) ws2[addr].s = { border: thinBorder };
-      }
-    }
-
-    XLSX.utils.book_append_sheet(wb, ws2, "Summary");
-
-    const filename = res.filename || "work_orders";
-    XLSX.writeFile(wb, filename + ".xlsx");
-    showToast("Excel downloaded", "success");
   });
+
+  rows.forEach((r, ri) => {
+    const rowNum = ri + 1;
+    const vals = [r["Order ID"], r["Date"], r["Requester"], r["Department"], r["Purpose"], r["Items"], r["Status"], r["Notes"]];
+    vals.forEach((v, ci) => {
+      const addr = XLSX.utils.encode_cell({ r: rowNum, c: ci });
+      ws[addr] = { v: v || "", t: "s" };
+
+      const cellStyle = {
+        border: thinBorder,
+        alignment: { wrapText: ci === 5 || ci === 7 },
+      };
+
+      if (ri % 2 === 0) {
+        cellStyle.fill = { fgColor: { rgb: "F0FDF4" } };
+      }
+
+      if (ci === 6) {
+        const sc = statusStyles[v];
+        if (sc) {
+          cellStyle.fill = { fgColor: { rgb: sc.fg } };
+          cellStyle.font = { color: { rgb: sc.fc }, bold: true, sz: 10 };
+        }
+      }
+
+      ws[addr].s = cellStyle;
+    });
+  });
+
+  ws["!ref"] = XLSX.utils.encode_range({ s: { c: 0, r: 0 }, e: { c: 7, r: rows.length } });
+  XLSX.utils.book_append_sheet(wb, ws, "Work Orders");
+
+  // Summary sheet
+  const statusCounts = {};
+  const deptCounts = {};
+  rows.forEach((r) => {
+    statusCounts[r.Status] = (statusCounts[r.Status] || 0) + 1;
+    deptCounts[r.Department] = (deptCounts[r.Department] || 0) + 1;
+  });
+
+  const summaryData = [
+    ["Metric", "Value"],
+    ["Total Orders", rows.length],
+    ["Pending", statusCounts["Pending"] || 0],
+    ["In Progress", statusCounts["In Progress"] || 0],
+    ["Completed", statusCounts["Completed"] || 0],
+    ["Cancelled", statusCounts["Cancelled"] || 0],
+    ["", ""],
+    ["Department Breakdown", ""],
+  ];
+  Object.keys(deptCounts).sort().forEach((dept) => {
+    summaryData.push([dept, deptCounts[dept]]);
+  });
+
+  const ws2 = XLSX.utils.aoa_to_sheet(summaryData);
+  ws2["!cols"] = [{ wch: 22 }, { wch: 12 }];
+
+  ["A1", "B1"].forEach((addr) => {
+    if (ws2[addr]) ws2[addr].s = {
+      fill: { fgColor: { rgb: "0D9488" } },
+      font: { bold: true, color: { rgb: "FFFFFF" }, sz: 10 },
+      border: headerBorder,
+    };
+  });
+
+  for (let ri = 1; ri < summaryData.length; ri++) {
+    for (let ci = 0; ci < 2; ci++) {
+      const addr = XLSX.utils.encode_cell({ r: ri, c: ci });
+      if (ws2[addr]) ws2[addr].s = { border: thinBorder };
+    }
+  }
+
+  XLSX.utils.book_append_sheet(wb, ws2, "Summary");
+
+  const filename = "Work_Orders_" + new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  XLSX.writeFile(wb, filename + ".xlsx");
+  showToast("Excel downloaded", "success");
 }
 
 // ========================================

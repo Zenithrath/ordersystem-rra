@@ -139,15 +139,20 @@ function readAllData() {
 }
 
 function buildOrderMap(orders, items) {
-  const itemCounts = {};
+  const itemMap = {};
   items.forEach(it => {
-    itemCounts[it.OrderID] = (itemCounts[it.OrderID] || 0) + 1;
+    if (!itemMap[it.OrderID]) itemMap[it.OrderID] = [];
+    itemMap[it.OrderID].push(it);
   });
 
-  return orders.map(order => ({
-    ...order,
-    ItemCount: itemCounts[order.OrderID] || 0
-  }));
+  return orders.map(order => {
+    const orderItems = itemMap[order.OrderID] || [];
+    return {
+      ...order,
+      ItemCount: orderItems.length,
+      ItemNames: orderItems.map(it => it.ItemName).join(", ")
+    };
+  });
 }
 
 // Build order map WITH full items (for detail view)
@@ -276,17 +281,22 @@ function getDashboardStats() {
     }).length
   };
 
-  // Recent 5 orders with item counts
+  // Recent 5 orders with item counts and names
   const itemMap = {};
   items.forEach(it => {
-    if (!itemMap[it.OrderID]) itemMap[it.OrderID] = 0;
-    itemMap[it.OrderID]++;
+    if (!itemMap[it.OrderID]) itemMap[it.OrderID] = { count: 0, names: [] };
+    itemMap[it.OrderID].count++;
+    itemMap[it.OrderID].names.push(it.ItemName);
   });
 
   const recentOrders = orders
     .sort((a, b) => new Date(b.CreatedAt) - new Date(a.CreatedAt))
     .slice(0, 5)
-    .map(o => ({ ...o, ItemCount: itemMap[o.OrderID] || 0 }));
+    .map(o => ({
+      ...o,
+      ItemCount: itemMap[o.OrderID] ? itemMap[o.OrderID].count : 0,
+      ItemNames: itemMap[o.OrderID] ? itemMap[o.OrderID].names.join(", ") : ""
+    }));
 
   stats.recentOrders = recentOrders;
 

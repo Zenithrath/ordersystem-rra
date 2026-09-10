@@ -225,9 +225,17 @@
                     <i data-lucide="refresh-cw" class="w-4 h-4"></i>
                     <span class="hidden sm:inline">Refresh</span>
                   </button>
-                  <button onclick="exportExcel()" class="inline-flex items-center gap-2 px-3 py-2.5 text-sm font-medium text-surface-600 bg-surface-50 border border-surface-200 rounded-xl hover:bg-surface-100 transition-colors">
+                  <button onclick="exportSelectedPDF()" id="btn-export-selected-pdf" class="inline-flex items-center gap-2 px-3 py-2.5 text-sm font-medium text-surface-600 bg-surface-50 border border-surface-200 rounded-xl hover:bg-surface-100 transition-colors hidden">
+                    <i data-lucide="file-text" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">PDF (<span id="selected-count-pdf">0</span>)</span>
+                  </button>
+                  <button onclick="exportSelectedExcel()" id="btn-export-selected-excel" class="inline-flex items-center gap-2 px-3 py-2.5 text-sm font-medium text-surface-600 bg-surface-50 border border-surface-200 rounded-xl hover:bg-surface-100 transition-colors hidden">
                     <i data-lucide="table" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Export Excel</span>
+                    <span class="hidden sm:inline">Excel (<span id="selected-count-excel">0</span>)</span>
+                  </button>
+                  <button onclick="exportExcel()" class="inline-flex items-center gap-2 px-3 py-2.5 text-sm font-medium text-surface-600 bg-surface-50 border border-surface-200 rounded-xl hover:bg-surface-100 transition-colors">
+                    <i data-lucide="download" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">Export All</span>
                   </button>
                 </div>
               </div>
@@ -277,11 +285,14 @@
               <table class="w-full">
                 <thead>
                   <tr class="border-b border-surface-100 bg-surface-50/50">
+                    <th class="px-5 py-3 w-10">
+                      <input type="checkbox" id="select-all" onchange="toggleSelectAll(this)" class="w-4 h-4 rounded border-surface-300 text-primary-500 focus:ring-primary-500/20 cursor-pointer" />
+                    </th>
                     <th class="text-left px-5 py-3 text-[11px] font-semibold text-surface-500 uppercase tracking-wider">Order ID</th>
                     <th class="text-left px-5 py-3 text-[11px] font-semibold text-surface-500 uppercase tracking-wider hidden sm:table-cell">Date</th>
                     <th class="text-left px-5 py-3 text-[11px] font-semibold text-surface-500 uppercase tracking-wider">Requester</th>
                     <th class="text-left px-5 py-3 text-[11px] font-semibold text-surface-500 uppercase tracking-wider hidden md:table-cell">Department</th>
-                    <th class="text-center px-5 py-3 text-[11px] font-semibold text-surface-500 uppercase tracking-wider">Items</th>
+                    <th class="text-left px-5 py-3 text-[11px] font-semibold text-surface-500 uppercase tracking-wider">Items</th>
                     <th class="text-center px-5 py-3 text-[11px] font-semibold text-surface-500 uppercase tracking-wider">Status</th>
                     <th class="text-right px-5 py-3 text-[11px] font-semibold text-surface-500 uppercase tracking-wider">Action</th>
                   </tr>

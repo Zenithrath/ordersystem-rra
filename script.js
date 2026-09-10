@@ -21,6 +21,7 @@ const DEBOUNCE_MS = 350;
 
 // --- Init ---
 document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("form-date").value = new Date().toISOString().slice(0, 10);
   loadDashboard();
   loadFilters();
   addItemRow();

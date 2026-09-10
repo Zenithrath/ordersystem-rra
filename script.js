@@ -900,15 +900,7 @@ function exportExcel() {
 
   ApiService.exportExcel(filters).then(res => {
     if (res && res.success && res.data && res.data.length > 0) {
-      const mapped = res.data.map(o => ({
-        OrderID: o["Order ID"] || o.OrderID || "",
-        Date: o.Date || "",
-        Users: o.Users || "",
-        Department: o.Department || "",
-        ItemNames: o.Items || o.ItemNames || "",
-        Status: o.Status || ""
-      }));
-      generateExcelFromData(mapped);
+      generateExcelFromData(res.data);
     } else {
       showToast("No data to export", "info");
     }
@@ -928,16 +920,10 @@ function generateExcelFromData(orders) {
   const wb = XLSX.utils.book_new();
 
   const thinBorder = {
-    top: { style: "thin", color: { rgb: "E2E8F0" } },
-    bottom: { style: "thin", color: { rgb: "E2E8F0" } },
-    left: { style: "thin", color: { rgb: "E2E8F0" } },
-    right: { style: "thin", color: { rgb: "E2E8F0" } },
-  };
-  const greenBorder = {
-    top: { style: "thin", color: { rgb: "0D9488" } },
-    bottom: { style: "thin", color: { rgb: "0D9488" } },
-    left: { style: "thin", color: { rgb: "0D9488" } },
-    right: { style: "thin", color: { rgb: "0D9488" } },
+    top: { style: "thin", color: { rgb: "000000" } },
+    bottom: { style: "thin", color: { rgb: "000000" } },
+    left: { style: "thin", color: { rgb: "000000" } },
+    right: { style: "thin", color: { rgb: "000000" } },
   };
 
   orders.forEach((o) => {
@@ -949,13 +935,15 @@ function generateExcelFromData(orders) {
     const day = orderDate.getDate();
     const month = monthNames[orderDate.getMonth()];
     const year = orderDate.getFullYear();
+    const dateStr = orderDate.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
     const rows = [
-      ["", "", "", "", "", "TAHUN", "", year, "", "", ""],
-      ["", "", "", "", "", "TANGGAL", "", day, month, "", ""],
-      ["=TODAY()", "", "", "", "", "", "", "", "", "", ""],
-      ["NO", "USER", "DEP", "DESCRIPTION", "SPECIFICATION", "ORDER", "", "SALDO", "", "NO. PR", "CLEAR"],
-      ["", "", "", "", "", "QTY", "UOM", "QTY", "UOM", "", ""],
+      ["PT.RRA TEKNOJAYA PERKASA", "", "", "", "", "", "", "", "", "TAHUN", "", year],
+      ["", "", "", "", "", "", "", "", "", "TANGGAL", "", day, month],
+      ["", "", "REKAP FORM REQUISITION", "", "", "", "", "", "", "", "", ""],
+      [dateStr, "", "", "", "", "", "", "", "", "", "", ""],
+      ["NO", "USER", "DEP", "DESCRIPTION", "SPECIFICATION", "", "ORDER", "", "SALDO", "", "NO. PR", "CLEAR"],
+      ["", "", "", "", "", "", "QTY", "UOM", "QTY", "UOM", "", ""],
     ];
 
     items.forEach((it, idx) => {
@@ -965,6 +953,7 @@ function generateExcelFromData(orders) {
         o.Department || "",
         it.Description || "",
         it.ItemName || "",
+        "",
         it.Quantity || 0,
         it.Unit || "PCS",
         it.SaldoQty || 0,
@@ -974,76 +963,72 @@ function generateExcelFromData(orders) {
       ]);
     });
 
+    // Add empty rows for signature area
+    for (let i = 0; i < 5; i++) {
+      rows.push(["", "", "", "", "", "", "", "", "", "", "", ""]);
+    }
+
     const ws = XLSX.utils.aoa_to_sheet(rows);
 
     ws["!cols"] = [
-      { wch: 5 }, { wch: 18 }, { wch: 12 }, { wch: 28 }, { wch: 35 },
+      { wch: 5 }, { wch: 18 }, { wch: 12 }, { wch: 28 }, { wch: 35 }, { wch: 3 },
       { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 16 }, { wch: 8 }
     ];
 
-    // Merge TAHUN header
     ws["!merges"] = [
-      { s: { r: 0, c: 5 }, e: { r: 0, c: 6 } },
-      { s: { r: 1, c: 5 }, e: { r: 1, c: 6 } },
-      { s: { r: 3, c: 5 }, e: { r: 3, c: 6 } },
-      { s: { r: 3, c: 7 }, e: { r: 3, c: 8 } },
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 8 } },
+      { s: { r: 0, c: 9 }, e: { r: 0, c: 10 } },
+      { s: { r: 1, c: 9 }, e: { r: 1, c: 10 } },
+      { s: { r: 2, c: 2 }, e: { r: 2, c: 8 } },
+      { s: { r: 4, c: 5 }, e: { r: 4, c: 6 } },
+      { s: { r: 4, c: 7 }, e: { r: 4, c: 8 } },
     ];
 
-    // Style header rows (green)
-    for (let c = 0; c < 11; c++) {
-      // Row 1-2: TAHUN/TANGGAL labels
-      [0, 1].forEach(r => {
+    // Row 0: Company name bold
+    const r0c0 = XLSX.utils.encode_cell({ r: 0, c: 0 });
+    if (ws[r0c0]) ws[r0c0].s = { font: { bold: true, sz: 12 }, border: thinBorder };
+
+    // Row 0: TAHUN label
+    const r0c9 = XLSX.utils.encode_cell({ r: 0, c: 9 });
+    if (ws[r0c9]) ws[r0c9].s = { font: { bold: true, sz: 10 }, alignment: { horizontal: "right" }, border: thinBorder };
+    const r0c11 = XLSX.utils.encode_cell({ r: 0, c: 11 });
+    if (ws[r0c11]) ws[r0c11].s = { font: { bold: true, sz: 10 }, border: thinBorder };
+
+    // Row 1: TANGGAL
+    const r1c9 = XLSX.utils.encode_cell({ r: 1, c: 9 });
+    if (ws[r1c9]) ws[r1c9].s = { font: { bold: true, sz: 10 }, alignment: { horizontal: "right" }, border: thinBorder };
+    const r1c11 = XLSX.utils.encode_cell({ r: 1, c: 11 });
+    if (ws[r1c11]) ws[r1c11].s = { font: { bold: true, sz: 10 }, border: thinBorder };
+
+    // Row 2: Title centered
+    const r2c2 = XLSX.utils.encode_cell({ r: 2, c: 2 });
+    if (ws[r2c2]) ws[r2c2].s = { font: { bold: true, sz: 14 }, alignment: { horizontal: "center" } };
+
+    // Row 4-5: Headers
+    for (let c = 0; c < 12; c++) {
+      [4, 5].forEach(r => {
         const addr = XLSX.utils.encode_cell({ r, c });
         if (ws[addr]) {
           ws[addr].s = {
-            fill: { fgColor: { rgb: "0D9488" } },
-            font: { bold: true, color: { rgb: "FFFFFF" }, sz: 10 },
-            alignment: { horizontal: "center" },
-            border: greenBorder,
+            fill: { fgColor: { rgb: "FFFFFF" } },
+            font: { bold: true, sz: 10 },
+            alignment: { horizontal: "center", vertical: "center" },
+            border: thinBorder,
           };
         }
       });
-      // Row 4: Column headers
-      const addr4 = XLSX.utils.encode_cell({ r: 3, c });
-      if (ws[addr4]) {
-        ws[addr4].s = {
-          fill: { fgColor: { rgb: "0D9488" } },
-          font: { bold: true, color: { rgb: "FFFFFF" }, sz: 10 },
-          alignment: { horizontal: "center" },
-          border: greenBorder,
-        };
-      }
-      // Row 5: Sub-headers (QTY, UOM)
-      const addr5 = XLSX.utils.encode_cell({ r: 4, c });
-      if (ws[addr5]) {
-        ws[addr5].s = {
-          fill: { fgColor: { rgb: "0D9488" } },
-          font: { bold: true, color: { rgb: "FFFFFF" }, sz: 9 },
-          alignment: { horizontal: "center" },
-          border: greenBorder,
-        };
-      }
     }
 
-    // Style data rows
+    // Data rows
     items.forEach((it, idx) => {
-      const r = idx + 5;
-      for (let c = 0; c < 11; c++) {
+      const r = idx + 6;
+      for (let c = 0; c < 12; c++) {
         const addr = XLSX.utils.encode_cell({ r, c });
         if (ws[addr]) {
-          const cellStyle = {
+          ws[addr].s = {
             border: thinBorder,
-            alignment: { horizontal: c === 0 || c === 5 || c === 6 || c === 7 || c === 8 || c === 10 ? "center" : "left" },
+            alignment: { horizontal: c === 0 || c === 6 || c === 7 || c === 8 || c === 9 || c === 11 ? "center" : "left" },
           };
-          if (idx % 2 === 0) {
-            cellStyle.fill = { fgColor: { rgb: "F0FDF4" } };
-          }
-          // Clear column green highlight
-          if (c === 10 && it.Clear) {
-            cellStyle.fill = { fgColor: { rgb: "D1FAE5" } };
-            cellStyle.font = { bold: true, color: { rgb: "065F46" } };
-          }
-          ws[addr].s = cellStyle;
         }
       }
     });

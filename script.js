@@ -481,6 +481,7 @@ function applyFilters() {
   currentFilters.status = document.getElementById("filter-status").value;
   currentFilters.department = document.getElementById("filter-department").value;
   currentFilters.month = document.getElementById("filter-month").value;
+  currentFilters.year = document.getElementById("filter-year").value;
 
   const sortVal = document.getElementById("filter-sort").value;
   if (sortVal === "date-desc") {
@@ -502,6 +503,7 @@ function clearFilters() {
   document.getElementById("filter-status").value = "";
   document.getElementById("filter-department").value = "";
   document.getElementById("filter-month").value = "";
+  document.getElementById("filter-year").value = "";
   document.getElementById("filter-sort").value = "date-desc";
   currentFilters = {};
   currentSort = { field: "date", dir: "desc" };
@@ -879,7 +881,7 @@ function exportExcel() {
   if (year) filters.year = year;
 
   ApiService.exportExcel(filters).then(res => {
-    if (res.success && res.data && res.data.length > 0) {
+    if (res && res.success && res.data && res.data.length > 0) {
       const mapped = res.data.map(o => ({
         OrderID: o["Order ID"] || o.OrderID || "",
         Date: o.Date || "",
@@ -894,7 +896,10 @@ function exportExcel() {
     } else {
       showToast("No data to export", "info");
     }
-  }).catch(() => showToast("Export failed", "error"));
+  }).catch(err => {
+    console.error("Export error:", err);
+    showToast("Export failed: " + (err.message || "Unknown error"), "error");
+  });
 }
 
 function generateExcelFromData(orders) {

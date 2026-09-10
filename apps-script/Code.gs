@@ -264,6 +264,10 @@ function getOrders(params) {
     const m = parseInt(params.month) - 1;
     const y = parseInt(params.year);
     enriched = enriched.filter(o => { const d = new Date(o.Date); return d.getMonth() === m && d.getFullYear() === y; });
+  } else if (params.month) {
+    const m = parseInt(params.month) - 1;
+    const y = new Date().getFullYear();
+    enriched = enriched.filter(o => { const d = new Date(o.Date); return d.getMonth() === m && d.getFullYear() === y; });
   } else if (params.year) {
     const y = parseInt(params.year);
     enriched = enriched.filter(o => new Date(o.Date).getFullYear() === y);
@@ -434,6 +438,9 @@ function exportExcel(params) {
   if (params.department) orders = orders.filter(o => o.Department === params.department);
   if (params.month && params.year) {
     const m = parseInt(params.month) - 1, y = parseInt(params.year);
+    orders = orders.filter(o => { const d = new Date(o.Date); return d.getMonth() === m && d.getFullYear() === y; });
+  } else if (params.month) {
+    const m = parseInt(params.month) - 1, y = new Date().getFullYear();
     orders = orders.filter(o => { const d = new Date(o.Date); return d.getMonth() === m && d.getFullYear() === y; });
   }
   orders.sort((a, b) => new Date(b.Date) - new Date(a.Date));

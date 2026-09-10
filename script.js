@@ -1033,6 +1033,17 @@ function generateExcelFromData(orders) {
       }
     });
 
+    // Embed logo image if available
+    if (typeof LOGO_BASE64 !== "undefined" && LOGO_BASE64) {
+      ws["!images"] = [{
+        name: "logo.png",
+        data: LOGO_BASE64,
+        opts: { encoding: "base64" },
+        pos: { row: 0, col: 0 },
+        size: { width: 150, height: 50 }
+      }];
+    }
+
     XLSX.utils.book_append_sheet(wb, ws, sheetName);
   });
 

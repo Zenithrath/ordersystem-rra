@@ -602,9 +602,6 @@ function exportExcel(params) {
   const xlsxBlob = tempSS.getAs("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   const base64 = Utilities.base64Encode(xlsxBlob.getBytes());
 
-  // Clean up temp file
-  DriveApp.getFileById(tempSS.getId()).setTrashed(true);
-
   return {
     success: true,
     data: base64,

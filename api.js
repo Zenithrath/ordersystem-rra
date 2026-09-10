@@ -158,7 +158,7 @@ const ApiService = (() => {
         .catch(err => ({ success: false, message: err.message || "Network error" }));
     },
 
-    // Export Excel (returns base64 + filename)
+    // Export Excel (no cache — bypasses caching layer)
     exportExcel(filters = {}) {
       const params = {};
       if (filters.status) params.status = filters.status;
@@ -166,7 +166,13 @@ const ApiService = (() => {
       if (filters.month) params.month = filters.month;
       if (filters.year) params.year = filters.year;
       if (filters.q) params.q = filters.q;
-      return apiCall("exportExcel", params);
+
+      const qs = new URLSearchParams({ action: "exportExcel", ...params }).toString();
+      const url = API_URL + "?" + qs;
+
+      return fetch(url)
+        .then(res => res.json())
+        .catch(err => ({ success: false, message: err.message || "Network error" }));
     },
 
     // Cache management

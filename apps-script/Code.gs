@@ -153,25 +153,48 @@ function migrateData() {
 
   if (!oldOrdersSheet) return { success: false, message: "No ORDERS sheet found" };
 
-  // Read old orders
-  const ordersData = oldOrdersSheet.getDataRange().getValues();
+  const lastRow = oldOrdersSheet.getLastRow();
+  if (lastRow < 2) return { success: false, message: "No data to migrate" };
+
+  // Read ALL columns that exist (may be 9 or 10)
+  const numCols = oldOrdersSheet.getLastColumn();
+  const ordersData = oldOrdersSheet.getRange(1, 1, lastRow, numCols).getValues();
   const ordersHeaders = ordersData[0];
+
+  // Build header map
+  const headerMap = {};
+  ordersHeaders.forEach((h, i) => { headerMap[h] = i; });
+
   const oldOrders = [];
   for (let i = 1; i < ordersData.length; i++) {
-    const obj = {};
-    ordersHeaders.forEach((h, j) => { obj[h] = ordersData[i][j]; });
-    oldOrders.push(obj);
+    const row = ordersData[i];
+    oldOrders.push({
+      OrderID: row[headerMap["OrderID"]] || row[0] || "",
+      Date: row[headerMap["Date"]] || row[1] || "",
+      RequesterName: row[headerMap["RequesterName"]] || row[2] || "",
+      Department: row[headerMap["Department"]] || row[3] || "",
+      Purpose: row[headerMap["Purpose"]] || row[4] || "",
+      Notes: row[headerMap["Notes"]] || row[5] || "",
+      Status: row[headerMap["Status"]] || row[6] || "Pending",
+      CreatedAt: row[headerMap["CreatedAt"]] || row[7] || "",
+      CompletedAt: row[headerMap["CompletedAt"]] || row[8] || ""
+    });
   }
 
-  // Read old items
+  // Read old items (if sheet exists)
   let oldItems = [];
   if (oldItemsSheet && oldItemsSheet.getLastRow() > 1) {
     const itemsData = oldItemsSheet.getDataRange().getValues();
     const itemsHeaders = itemsData[0];
     for (let i = 1; i < itemsData.length; i++) {
-      const obj = {};
-      itemsHeaders.forEach((h, j) => { obj[h] = itemsData[i][j]; });
-      oldItems.push(obj);
+      const row = itemsData[i];
+      oldItems.push({
+        OrderID: row[0] || "",
+        ItemName: row[1] || "",
+        Quantity: row[2] || 0,
+        Unit: row[3] || "pcs",
+        Notes: row[4] || ""
+      });
     }
   }
 
@@ -180,38 +203,37 @@ function migrateData() {
   oldItems.forEach(it => {
     if (!itemMap[it.OrderID]) itemMap[it.OrderID] = [];
     itemMap[it.OrderID].push({
-      ItemName: it.ItemName || "",
+      ItemName: it.ItemName,
       Quantity: parseInt(it.Quantity) || 0,
       Unit: it.Unit || "pcs",
-      Notes: it.Notes || ""
+      Notes: it.Notes
     });
   });
 
-  // Build new rows (with Items as JSON)
+  // Build new rows with Items JSON
   const newRows = oldOrders.map(o => [
     o.OrderID,
     o.Date,
     o.RequesterName,
     o.Department,
-    o.Purpose || "",
-    o.Notes || "",
+    o.Purpose,
+    o.Notes,
     o.Status,
-    o.CreatedAt || "",
-    o.CompletedAt || "",
+    o.CreatedAt,
+    o.CompletedAt,
     JSON.stringify(itemMap[o.OrderID] || [])
   ]);
 
-  // Clear old sheet and rewrite
-  if (oldOrdersSheet.getLastRow() > 1) {
-    oldOrdersSheet.getRange(2, 1, oldOrdersSheet.getLastRow() - 1, oldOrdersSheet.getLastColumn()).clearContent();
-  }
-  // Update header
+  // Clear everything and rewrite
+  oldOrdersSheet.clearContents();
+
+  // Write new header
   oldOrdersSheet.getRange(1, 1, 1, 10).setValues([[
     "OrderID", "Date", "RequesterName", "Department",
     "Purpose", "Notes", "Status", "CreatedAt", "CompletedAt", "Items"
   ]]);
 
-  // Write new data
+  // Write data
   if (newRows.length > 0) {
     oldOrdersSheet.getRange(2, 1, newRows.length, 10).setValues(newRows);
   }
@@ -225,7 +247,7 @@ function migrateData() {
 
   return {
     success: true,
-    message: "Migrated " + newRows.length + " orders. Old ORDER_ITEMS sheet deleted."
+    message: "Migrated " + newRows.length + " orders. Items merged into Items column."
   };
 }
 

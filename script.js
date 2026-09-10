@@ -952,66 +952,40 @@ function exportExcel() {
     });
 }
 
-function generateExcelFromData(orders) {
+async function loadLogoBase64() {
+  try {
+    if (typeof window !== "undefined" && window.LOGO_BASE64) return window.LOGO_BASE64;
+  } catch (err) {}
+  try {
+    const res = await fetch("logorra.png");
+    if (!res.ok) return "";
+    const blob = await res.blob();
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    return String(dataUrl || "").split(",")[1] || "";
+  } catch (err) {
+    console.warn("Logo load failed:", err);
+    return "";
+  }
+}
+
+async function generateExcelFromData(orders) {
   if (!orders || !Array.isArray(orders) || orders.length === 0) {
     throw new Error("Tidak ada data untuk diexport.");
   }
 
+  const logoBase64 = await loadLogoBase64();
+
   const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet("REKAP FORM", {
-    pageSetup: {
-      orientation: "landscape",
-      paperSize: 9,
-      fitToWidth: 1,
-      fitToHeight: 0,
-    },
-    pageMargins: {
-      left: 0.25,
-      right: 0.25,
-      top: 0.4,
-      bottom: 0.4,
-      header: 0.1,
-      footer: 0.1,
-    },
-  });
 
-  ws.views = [{ state: "frozen", ySplit: 7 }];
-
-  // =========================================================
-  // CONFIG
-  // =========================================================
-
-  const now = new Date();
   const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   const dayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-  const year = now.getFullYear();
-  const dayNum = now.getDate();
-  const monthName = months[now.getMonth()];
-  const dayName = dayNames[now.getDay()];
-  const formattedDate = `${dayName}, ${String(dayNum).padStart(2, "0")} ${monthName} ${year}`;
 
-  // =========================================================
-  // COLUMN WIDTHS (12 columns A-L)
-  // =========================================================
-
-  ws.columns = [
-    { width: 4 },    // A: NO
-    { width: 22 },   // B: USER
-    { width: 9 },    // C: DEP
-    { width: 33 },   // D: DESCRIPTION
-    { width: 53 },   // E: SPECIFICATION
-    { width: 6 },    // F: ORDER QTY
-    { width: 7 },    // G: ORDER UOM
-    { width: 5 },    // H: SALDO QTY
-    { width: 6 },    // I: SALDO UOM
-    { width: 8 },    // J: NO. PR
-    { width: 9 },    // K: CLEAR
-    { width: 8 },    // L: (extra)
-  ];
-
-  // =========================================================
-  // STYLES
-  // =========================================================
+  const WIDTHS = [4, 22, 9, 33, 53, 6, 7, 5, 6, 8, 9, 8];
 
   const whiteFill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFFF" } };
   const thinBorder = {
@@ -1026,224 +1000,224 @@ function generateExcelFromData(orders) {
     left: { style: "thin", color: { argb: "FF000000" } },
     right: { style: "medium", color: { argb: "FF000000" } },
   };
-  const noBorder = {};
   const bottomBorder2px = {
     bottom: { style: "medium", color: { argb: "FF000000" } },
   };
-  const bottomBorder1px = {
-    bottom: { style: "thin", color: { argb: "FF000000" } },
-  };
-  const valueBorder = {
-    right: { style: "thin", color: { argb: "FF000000" } },
-    bottom: { style: "thin", color: { argb: "FF000000" } },
-  };
 
-  function fillWhite(row, colCount) {
-    for (let c = 1; c <= colCount; c++) {
-      const cell = row.getCell(c);
-      cell.fill = whiteFill;
-    }
-  }
-
-  // =========================================================
-  // ROW 1: Logo (image positioned absolutely)
-  // =========================================================
-
-  const row1 = ws.getRow(1);
-  row1.height = 20;
-  fillWhite(row1, 12);
-
-  if (typeof LOGO_BASE64 !== "undefined" && LOGO_BASE64) {
-    const imgId = wb.addImage({ base64: LOGO_BASE64, extension: "png" });
-    ws.addImage(imgId, {
-      tl: { col: 0, row: 0.3 },
-      ext: { width: 228, height: 40 },
-    });
-  }
-
-  // =========================================================
-  // ROW 2: Title "REKAP FORM REQUISITION" (merged C2:G2)
-  // =========================================================
-
-  ws.mergeCells("C2:G2");
-  const row2 = ws.getRow(2);
-  row2.height = 20;
-  fillWhite(row2, 12);
-  row2.getCell(3).value = "REKAP FORM REQUISITION";
-  row2.getCell(3).font = { name: "Calibri", size: 14, bold: true, color: { argb: "FF000000" } };
-  row2.getCell(3).alignment = { horizontal: "center", vertical: "middle" };
-
-  // =========================================================
-  // ROW 3: TAHUN + value (with border)
-  // =========================================================
-
-  const row3 = ws.getRow(3);
-  row3.height = 21;
-  fillWhite(row3, 12);
-  row3.getCell(7).value = "TAHUN";
-  row3.getCell(7).font = { name: "Calibri", size: 10, color: { argb: "FF000000" } };
-  row3.getCell(7).alignment = { horizontal: "right", vertical: "middle" };
-  row3.getCell(9).value = year;
-  row3.getCell(9).font = { name: "Calibri", size: 10, bold: true, color: { argb: "FF000000" } };
-  row3.getCell(9).alignment = { horizontal: "center", vertical: "middle" };
-  ws.mergeCells("I3:K3");
-  row3.getCell(9).border = valueBorder;
-
-  // =========================================================
-  // ROW 4: TANGGAL + day + month (with border)
-  // =========================================================
-
-  const row4 = ws.getRow(4);
-  row4.height = 21;
-  fillWhite(row4, 12);
-  ws.mergeCells("G4:H4");
-  row4.getCell(7).value = "TANGGAL";
-  row4.getCell(7).font = { name: "Calibri", size: 10, color: { argb: "FF000000" } };
-  row4.getCell(7).alignment = { horizontal: "right", vertical: "middle" };
-  row4.getCell(9).value = dayNum;
-  row4.getCell(9).font = { name: "Calibri", size: 10, bold: true, color: { argb: "FF000000" } };
-  row4.getCell(9).alignment = { horizontal: "center", vertical: "middle" };
-  ws.mergeCells("J4:K4");
-  row4.getCell(10).value = monthName;
-  row4.getCell(10).font = { name: "Calibri", size: 10, bold: true, color: { argb: "FF000000" } };
-  row4.getCell(10).alignment = { horizontal: "center", vertical: "middle" };
-  row4.getCell(10).border = valueBorder;
-
-  // =========================================================
-  // ROW 5: Date string (merged A5:D5, bottom border 2px)
-  // =========================================================
-
-  ws.mergeCells("A5:D5");
-  const row5 = ws.getRow(5);
-  row5.height = 20;
-  fillWhite(row5, 12);
-  row5.getCell(1).value = formattedDate;
-  row5.getCell(1).font = { name: "Calibri", size: 10, color: { argb: "FF000000" } };
-  row5.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
-  row5.getCell(1).border = bottomBorder2px;
-
-  // =========================================================
-  // ROWS 6-7: TABLE HEADERS
-  // =========================================================
-
-  // Merge vertically (rowspan 2)
-  ws.mergeCells("A6:A7"); // NO
-  ws.mergeCells("B6:B7"); // USER
-  ws.mergeCells("C6:C7"); // DEP
-  ws.mergeCells("D6:D7"); // DESCRIPTION
-  ws.mergeCells("E6:E7"); // SPECIFICATION
-  ws.mergeCells("J6:J7"); // NO. PR
-  ws.mergeCells("K6:K7"); // CLEAR
-
-  // Merge horizontally (colspan 2)
-  ws.mergeCells("F6:G6"); // ORDER
-  ws.mergeCells("H6:I6"); // SALDO
-
-  const r6 = ws.getRow(6);
-  r6.height = 22;
-  fillWhite(r6, 12);
-  r6.getCell(1).value = "NO";
-  r6.getCell(2).value = "USER";
-  r6.getCell(3).value = "DEP";
-  r6.getCell(4).value = "DESCRIPTION";
-  r6.getCell(5).value = "SPECIFICATION";
-  r6.getCell(6).value = "ORDER";
-  r6.getCell(8).value = "SALDO";
-  r6.getCell(10).value = "NO. PR";
-  r6.getCell(11).value = "CLEAR";
-
-  const r7 = ws.getRow(7);
-  r7.height = 20;
-  fillWhite(r7, 12);
-  r7.getCell(6).value = "QTY";
-  r7.getCell(7).value = "UOM";
-  r7.getCell(8).value = "QTY";
-  r7.getCell(9).value = "UOM";
-
-  // Style header rows
   const headerFont = { name: "Calibri", size: 10, bold: true, color: { argb: "FF000000" } };
   const headerAlign = { horizontal: "center", vertical: "middle", wrapText: true };
-
-  [r6, r7].forEach(row => {
-    for (let c = 1; c <= 12; c++) {
-      const cell = row.getCell(c);
-      cell.font = headerFont;
-      cell.alignment = headerAlign;
-      cell.border = thinBorder;
-    }
-  });
-
-  // ORDER/SALDO: thicker right border
-  r6.getCell(6).border = thickRightBorder;
-  r6.getCell(7).border = thickRightBorder;
-  r6.getCell(8).border = thickRightBorder;
-
-  // Bottom border on header row 6
-  for (let c = 1; c <= 12; c++) {
-    r6.getCell(c).border = {
-      ...r6.getCell(c).border,
-      bottom: { style: "thin", color: { argb: "FF000000" } },
-    };
-  }
-
-  // =========================================================
-  // DATA ROWS
-  // =========================================================
-
-  let rowNum = 8;
-  let itemNumber = 1;
   const bodyFont = { name: "Calibri", size: 10, color: { argb: "FF000000" } };
   const bodyAlignLeft = { horizontal: "left", vertical: "middle", wrapText: true };
   const bodyAlignCenter = { horizontal: "center", vertical: "middle", wrapText: true };
 
-  orders.forEach((order) => {
-    const items = Array.isArray(order.Items) ? order.Items : Array.isArray(order.items) ? order.items : [];
+  function fillWhite(row, colCount) {
+    for (let c = 1; c <= colCount; c++) {
+      row.getCell(c).fill = whiteFill;
+    }
+  }
 
-    if (items.length === 0) {
-      const row = ws.getRow(rowNum);
-      row.height = 20;
-      fillWhite(row, 12);
-      row.getCell(1).value = itemNumber++;
-      row.getCell(2).value = order.User || order.user || "";
-      row.getCell(3).value = order.Department || order.department || "";
-      row.getCell(4).value = order.Description || order.description || "";
-      row.getCell(5).value = order.ItemName || order.itemName || "";
-      row.getCell(6).value = order.Quantity || order.quantity || 0;
-      row.getCell(7).value = order.Unit || order.unit || "PCS";
-      row.getCell(8).value = order.SaldoQty || order.saldoQty || 0;
-      row.getCell(9).value = order.SaldoUom || order.saldoUom || order.Unit || "PCS";
-      row.getCell(10).value = order.NoPR || order.noPR || order.OrderID || order.orderID || "";
+  function getItems(order) {
+    if (Array.isArray(order.Items)) return order.Items;
+    if (Array.isArray(order.items)) return order.items;
+    return [];
+  }
 
-      for (let c = 1; c <= 12; c++) {
-        const cell = row.getCell(c);
-        cell.font = bodyFont;
-        cell.alignment = [1, 6, 7, 8, 9, 10].includes(c) ? bodyAlignCenter : bodyAlignLeft;
-        cell.border = thinBorder;
-      }
-      // ORDER/SALDO right border thicker
-      row.getCell(6).border = thickRightBorder;
-      row.getCell(7).border = thickRightBorder;
-      row.getCell(8).border = thickRightBorder;
-      rowNum++;
-      return;
+  let logoId = null;
+  if (logoBase64) {
+    try {
+      logoId = wb.addImage({ base64: logoBase64, extension: "png" });
+    } catch (err) {
+      console.warn("Logo embed failed:", err);
+      logoId = null;
+    }
+  }
+
+  const usedNames = {};
+  function sheetNameFor(raw, idx) {
+    let name = String(raw || "ORDER-" + (idx + 1)).substring(0, 31).replace(/[\\\/\*\?\[\]:]/g, "").trim();
+    if (!name) name = "ORDER-" + (idx + 1);
+    if (!usedNames[name]) {
+      usedNames[name] = 1;
+      return name;
+    }
+    usedNames[name] += 1;
+    return (name.substring(0, 28) + "-" + usedNames[name]).substring(0, 31);
+  }
+
+  orders.forEach((order, orderIdx) => {
+    const items = getItems(order);
+    const orderId = order.OrderID || order.orderID || order.NoPR || order.noPR || "ORDER-" + (orderIdx + 1);
+
+    const ws = wb.addWorksheet(sheetNameFor(orderId, orderIdx), {
+      pageSetup: {
+        orientation: "landscape",
+        paperSize: 9,
+        fitToWidth: 1,
+        fitToHeight: 0,
+      },
+      pageMargins: {
+        left: 0.25,
+        right: 0.25,
+        top: 0.4,
+        bottom: 0.4,
+        header: 0.1,
+        footer: 0.1,
+      },
+    });
+    ws.columns = WIDTHS.map((w) => ({ width: w }));
+
+    const parsed = order.Date || order.date ? new Date(order.Date || order.date) : new Date();
+    const valid = isNaN(parsed.getTime()) ? new Date() : parsed;
+    const year = valid.getFullYear();
+    const dayNum = valid.getDate();
+    const monthName = months[valid.getMonth()];
+    const formattedDate = `${dayNames[valid.getDay()]}, ${String(dayNum).padStart(2, "0")} ${monthName} ${year}`;
+
+    // =========================================================
+    // ROW 1: Logo image (logorra.png) top-left, no border
+    // =========================================================
+
+    const row1 = ws.getRow(1);
+    row1.height = 20;
+    fillWhite(row1, 12);
+    if (logoId !== null) {
+      ws.addImage(logoId, {
+        tl: { col: 0, row: 0.3 },
+        ext: { width: 228, height: 40 },
+      });
     }
 
-    items.forEach((item) => {
+    // =========================================================
+    // ROW 2: Title "REKAP FORM REQUISITION" (merged C2:G2)
+    // =========================================================
+
+    ws.mergeCells("C2:G2");
+    const row2 = ws.getRow(2);
+    row2.height = 20;
+    fillWhite(row2, 12);
+    row2.getCell(3).value = "REKAP FORM REQUISITION";
+    row2.getCell(3).font = { name: "Calibri", size: 14, bold: true, color: { argb: "FF000000" } };
+    row2.getCell(3).alignment = { horizontal: "center", vertical: "middle" };
+
+    // =========================================================
+    // ROW 3: TAHUN label + value box (full border)
+    // =========================================================
+
+    const row3 = ws.getRow(3);
+    row3.height = 21;
+    fillWhite(row3, 12);
+    row3.getCell(7).value = "TAHUN";
+    row3.getCell(7).font = { name: "Calibri", size: 10, color: { argb: "FF000000" } };
+    row3.getCell(7).alignment = { horizontal: "right", vertical: "middle" };
+    ws.mergeCells("I3:K3");
+    row3.getCell(9).value = year;
+    row3.getCell(9).font = { name: "Calibri", size: 10, bold: true, color: { argb: "FF000000" } };
+    row3.getCell(9).alignment = { horizontal: "center", vertical: "middle" };
+    row3.getCell(9).border = thinBorder;
+
+    // =========================================================
+    // ROW 4: TANGGAL label + day box + month box (full border)
+    // =========================================================
+
+    const row4 = ws.getRow(4);
+    row4.height = 21;
+    fillWhite(row4, 12);
+    ws.mergeCells("G4:H4");
+    row4.getCell(7).value = "TANGGAL";
+    row4.getCell(7).font = { name: "Calibri", size: 10, color: { argb: "FF000000" } };
+    row4.getCell(7).alignment = { horizontal: "right", vertical: "middle" };
+    row4.getCell(9).value = dayNum;
+    row4.getCell(9).font = { name: "Calibri", size: 10, bold: true, color: { argb: "FF000000" } };
+    row4.getCell(9).alignment = { horizontal: "center", vertical: "middle" };
+    row4.getCell(9).border = thinBorder;
+    ws.mergeCells("J4:K4");
+    row4.getCell(10).value = String(monthName).toUpperCase();
+    row4.getCell(10).font = { name: "Calibri", size: 10, bold: true, color: { argb: "FF000000" } };
+    row4.getCell(10).alignment = { horizontal: "center", vertical: "middle" };
+    row4.getCell(10).border = thinBorder;
+
+    // =========================================================
+    // ROW 5: Date string (merged A5:D5, bottom border 2px)
+    // =========================================================
+
+    ws.mergeCells("A5:D5");
+    const row5 = ws.getRow(5);
+    row5.height = 20;
+    fillWhite(row5, 12);
+    row5.getCell(1).value = formattedDate;
+    row5.getCell(1).font = { name: "Calibri", size: 10, color: { argb: "FF000000" } };
+    row5.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
+    row5.getCell(1).border = bottomBorder2px;
+
+    // =========================================================
+    // ROWS 6-7: TABLE HEADERS
+    // =========================================================
+
+    ws.mergeCells("A6:A7"); // NO
+    ws.mergeCells("B6:B7"); // USER
+    ws.mergeCells("C6:C7"); // DEP
+    ws.mergeCells("D6:D7"); // DESCRIPTION
+    ws.mergeCells("E6:E7"); // SPECIFICATION
+    ws.mergeCells("J6:J7"); // NO. PR
+    ws.mergeCells("K6:K7"); // CLEAR
+    ws.mergeCells("F6:G6"); // ORDER
+    ws.mergeCells("H6:I6"); // SALDO
+
+    const r6 = ws.getRow(6);
+    r6.height = 22;
+    fillWhite(r6, 12);
+    r6.getCell(1).value = "NO";
+    r6.getCell(2).value = "USER";
+    r6.getCell(3).value = "DEP";
+    r6.getCell(4).value = "DESCRIPTION";
+    r6.getCell(5).value = "SPECIFICATION";
+    r6.getCell(6).value = "ORDER";
+    r6.getCell(8).value = "SALDO";
+    r6.getCell(10).value = "NO. PR";
+    r6.getCell(11).value = "CLEAR";
+
+    const r7 = ws.getRow(7);
+    r7.height = 20;
+    fillWhite(r7, 12);
+    r7.getCell(6).value = "QTY";
+    r7.getCell(7).value = "UOM";
+    r7.getCell(8).value = "QTY";
+    r7.getCell(9).value = "UOM";
+
+    [r6, r7].forEach((row) => {
+      for (let c = 1; c <= 12; c++) {
+        const cell = row.getCell(c);
+        cell.font = headerFont;
+        cell.alignment = headerAlign;
+        cell.border = thinBorder;
+      }
+    });
+    r6.getCell(6).border = thickRightBorder;
+    r6.getCell(7).border = thickRightBorder;
+    r6.getCell(8).border = thickRightBorder;
+
+    // =========================================================
+    // DATA ROWS (numbering restarts at 1 per sheet)
+    // =========================================================
+
+    let rowNum = 8;
+    let itemNumber = 1;
+
+    function writeDataRow(item, fallbackUser, fallbackDept) {
       const row = ws.getRow(rowNum);
       row.height = 20;
       fillWhite(row, 12);
-
       row.getCell(1).value = itemNumber++;
-      row.getCell(2).value = order.User || order.user || item.User || item.user || "";
-      row.getCell(3).value = order.Department || order.department || item.Department || item.department || "";
+      row.getCell(2).value = item.User || item.user || fallbackUser || "";
+      row.getCell(3).value = fallbackDept || item.Department || item.department || "";
       row.getCell(4).value = item.Description || item.description || "";
       row.getCell(5).value = item.ItemName || item.itemName || item.Specification || item.specification || "";
       row.getCell(6).value = item.Quantity || item.quantity || 0;
       row.getCell(7).value = item.Unit || item.unit || "PCS";
       row.getCell(8).value = item.SaldoQty || item.saldoQty || 0;
       row.getCell(9).value = item.SaldoUom || item.saldoUom || item.Unit || item.unit || "PCS";
-      row.getCell(10).value = order.NoPR || order.noPR || order.OrderID || order.orderID || "";
-
+      row.getCell(10).value = order.NoPR || order.noPR || orderId;
+      row.getCell(11).value = item.Clear || item.clear ? "V" : "";
       for (let c = 1; c <= 12; c++) {
         const cell = row.getCell(c);
         cell.font = bodyFont;
@@ -1254,31 +1228,35 @@ function generateExcelFromData(orders) {
       row.getCell(7).border = thickRightBorder;
       row.getCell(8).border = thickRightBorder;
       rowNum++;
-    });
+    }
+
+    if (items.length === 0) {
+      writeDataRow(order, "", order.Department || order.department || "");
+    } else {
+      const fallbackUser = order.User || order.user || "";
+      const fallbackDept = order.Department || order.department || "";
+      items.forEach((item) => writeDataRow(item, fallbackUser, fallbackDept));
+    }
+
+    // =========================================================
+    // EMPTY ROWS (signature area) — white, no border
+    // =========================================================
+
+    for (let i = 0; i < 5; i++) {
+      const row = ws.getRow(rowNum);
+      row.height = 20;
+      fillWhite(row, 12);
+      rowNum++;
+    }
+
+    ws.pageSetup.printArea = `A1:L${rowNum - 1}`;
   });
-
-  // =========================================================
-  // EMPTY ROWS (signature area)
-  // =========================================================
-
-  for (let i = 0; i < 5; i++) {
-    const row = ws.getRow(rowNum);
-    row.height = 20;
-    fillWhite(row, 12);
-    rowNum++;
-  }
-
-  // =========================================================
-  // PRINT AREA
-  // =========================================================
-
-  ws.pageSetup.printArea = `A1:L${rowNum - 1}`;
 
   // =========================================================
   // EXPORT
   // =========================================================
 
-  const filename = `REKAP_FORM_REQUISITION_${year}.xlsx`;
+  const filename = `REKAP_FORM_REQUISITION_${new Date().getFullYear()}.xlsx`;
 
   wb.xlsx.writeBuffer().then((buffer) => {
     const blob = new Blob([buffer], {

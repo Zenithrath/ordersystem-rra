@@ -836,12 +836,16 @@ function submitOrder() {
 
   const data = getFormData();
 
-  if (!data.requesterName || !data.department) {
+  if (!data.date || !data.department) {
     showToast("Please fill in all required fields", "error");
     return;
   }
   if (data.items.length === 0) {
     document.getElementById("items-error").classList.remove("hidden");
+    return;
+  }
+  if (data.items.some((it) => !it.user)) {
+    showToast("Please fill in USER for each item", "error");
     return;
   }
   document.getElementById("items-error").classList.add("hidden");

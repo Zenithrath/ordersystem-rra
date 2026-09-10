@@ -671,27 +671,19 @@ function renderDrawer(order) {
     </div>
   `;
 
-  const isEditable = order.Status !== "Completed" && order.Status !== "Cancelled";
+  const statusBtn = (s, cls) =>
+    order.Status === s
+      ? ""
+      : `<button onclick="changeStatus('${order.OrderID}', '${s}')" class="px-3 py-2 text-xs font-medium ${cls} rounded-xl hover:opacity-80 transition-colors">${s === "In Progress" ? "Mark In Progress" : s === "Completed" ? "Mark Completed" : s === "Cancelled" ? "Cancel" : "Mark " + s}</button>`;
   footer.innerHTML = `
     <div class="flex flex-wrap gap-2">
-      ${
-        isEditable
-          ? `
-        <button onclick="editOrder('${order.OrderID}')" class="px-3 py-2 text-xs font-medium text-surface-700 bg-white border border-surface-200 rounded-xl hover:bg-surface-50 transition-colors">
-          Edit
-        </button>
-        <button onclick="changeStatus('${order.OrderID}', 'In Progress')" class="px-3 py-2 text-xs font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition-colors">
-          Mark In Progress
-        </button>
-        <button onclick="changeStatus('${order.OrderID}', 'Completed')" class="px-3 py-2 text-xs font-medium text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-xl hover:bg-emerald-100 transition-colors">
-          Mark Completed
-        </button>
-        <button onclick="changeStatus('${order.OrderID}', 'Cancelled')" class="px-3 py-2 text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-xl hover:bg-red-100 transition-colors">
-          Cancel
-        </button>
-      `
-          : ""
-      }
+      <button onclick="editOrder('${order.OrderID}')" class="px-3 py-2 text-xs font-medium text-surface-700 bg-white border border-surface-200 rounded-xl hover:bg-surface-50 transition-colors">
+        Edit
+      </button>
+      ${order.Status !== "Pending" ? `<button onclick="changeStatus('${order.OrderID}', 'Pending')" class="px-3 py-2 text-xs font-medium text-surface-600 bg-surface-50 border border-surface-200 rounded-xl hover:bg-surface-100 transition-colors">Mark Pending</button>` : ""}
+      ${statusBtn("In Progress", "text-blue-600 bg-blue-50 border border-blue-200")}
+      ${statusBtn("Completed", "text-emerald-600 bg-emerald-50 border border-emerald-200")}
+      ${statusBtn("Cancelled", "text-red-600 bg-red-50 border border-red-200")}
       <button onclick="exportWorkOrderPDF()" class="px-3 py-2 text-xs font-medium text-surface-600 bg-surface-50 border border-surface-200 rounded-xl hover:bg-surface-100 transition-colors ml-auto">
         Export PDF
       </button>

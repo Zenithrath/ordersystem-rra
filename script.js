@@ -535,7 +535,7 @@ function renderDrawer(order) {
       <div class="flex items-center justify-between">
         <div>
           <h4 class="text-lg font-bold text-surface-800">${order.OrderID}</h4>
-          <p class="text-xs text-surface-400 mt-0.5">Created ${formatDateTime(order.CreatedAt)}</p>
+          <p class="text-xs text-surface-400 mt-0.5">${formatDate(order.Date)}</p>
         </div>
         <span class="badge badge-${statusClass(order.Status)}">${order.Status}</span>
       </div>

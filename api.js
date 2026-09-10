@@ -10,27 +10,17 @@ const API = {
     this._baseUrl = CONFIG.API_URL;
   },
 
-  async _request(method, params = {}, body = null) {
+  async _request(action, params = {}) {
     if (!this._baseUrl) {
       return { success: false, message: "API URL not configured. Set CONFIG.API_URL in config.js" };
     }
 
     try {
-      let url = this._baseUrl;
-      let options = {
-        method: method,
-        redirect: "follow"
-      };
+      const allParams = { action, ...params };
+      const qs = new URLSearchParams(allParams).toString();
+      const url = this._baseUrl + "?" + qs;
 
-      if (method === "GET") {
-        const qs = new URLSearchParams(params).toString();
-        if (qs) url += "?" + qs;
-      } else {
-        options.headers = { "Content-Type": "application/json" };
-        options.body = JSON.stringify(body);
-      }
-
-      const response = await fetch(url, options);
+      const response = await fetch(url, { method: "GET", redirect: "follow" });
       const text = await response.text();
 
       try {
@@ -52,59 +42,50 @@ const API = {
   },
 
   async getOrderDetail(orderId) {
-    return this._request("GET", { action: "getOrderDetail", id: orderId });
+    return this._request("getOrderDetail", { id: orderId });
   },
 
   async getDashboardStats() {
-    return this._request("GET", { action: "getDashboardStats" });
+    return this._request("getDashboardStats");
   },
 
   async searchOrders(query) {
-    return this._request("GET", { action: "searchOrders", q: query });
+    return this._request("searchOrders", { q: query });
   },
 
   async filterOrders(params) {
-    return this._request("GET", { action: "filterOrders", ...params });
-  },
-
-  async getMasterItems() {
-    return this._request("GET", { action: "getMasterItems" });
+    return this._request("filterOrders", params);
   },
 
   async getDepartments() {
-    return this._request("GET", { action: "getDepartments" });
+    return this._request("getDepartments");
   },
 
   // ========================================
-  // POST Requests
+  // Write Requests (via GET with params)
   // ========================================
 
   async createOrder(orderData) {
-    return this._request("POST", {}, { action: "createOrder", ...orderData });
+    return this._request("createOrder", {
+      data: JSON.stringify(orderData)
+    });
   },
 
   async updateOrder(orderData) {
-    return this._request("POST", {}, { action: "updateOrder", ...orderData });
+    return this._request("updateOrder", {
+      data: JSON.stringify(orderData)
+    });
   },
 
   async updateOrderStatus(orderId, status) {
-    return this._request("POST", {}, {
-      action: "updateOrderStatus",
+    return this._request("updateOrderStatus", {
       orderId,
       status
     });
   },
 
   async deleteOrder(orderId) {
-    return this._request("POST", {}, { action: "deleteOrder", id: orderId });
-  },
-
-  async addMasterItem(item) {
-    return this._request("POST", {}, { action: "addMasterItem", ...item });
-  },
-
-  async deleteMasterItem(id) {
-    return this._request("POST", {}, { action: "deleteMasterItem", id });
+    return this._request("deleteOrder", { id: orderId });
   }
 };
 
@@ -291,22 +272,5 @@ const MOCK_DATA = {
         { ItemName: "Sarung Tangan", Quantity: 10, Unit: "pair", Notes: "Safety" }
       ]
     }
-  ],
-  masterItems: [
-    { ID: "MI-001", Name: "Tang Potong", Unit: "pcs", Category: "Tools" },
-    { ID: "MI-002", Name: "Gypsum Board", Unit: "pcs", Category: "Material" },
-    { ID: "MI-003", Name: "Kabel NYM 2x2.5", Unit: "meter", Category: "Electrical" },
-    { ID: "MI-004", Name: "Paku 5cm", Unit: "kg", Category: "Hardware" },
-    { ID: "MI-005", Name: "Semen Portland", Unit: "bag", Category: "Material" },
-    { ID: "MI-006", Name: "Besi Beton 10mm", Unit: "meter", Category: "Material" },
-    { ID: "MI-007", Name: "Cat Tembok 20L", Unit: "liter", Category: "Paint" },
-    { ID: "MI-008", Name: "Pipa PVC 2 inch", Unit: "meter", Category: "Plumbing" },
-    { ID: "MI-009", Name: "Sekrup Gypsum", Unit: "box", Category: "Hardware" },
-    { ID: "MI-010", Name: "Switch Listrik", Unit: "pcs", Category: "Electrical" },
-    { ID: "MI-011", Name: "Stop Kontak", Unit: "pcs", Category: "Electrical" },
-    { ID: "MI-012", Name: "Lemari Arsip", Unit: "unit", Category: "Furniture" },
-    { ID: "MI-013", Name: "Kertas A4", Unit: "box", Category: "Office" },
-    { ID: "MI-014", Name: "Tinta Printer", Unit: "unit", Category: "Office" },
-    { ID: "MI-015", Name: "Sarung Tangan", Unit: "pair", Category: "Safety" }
   ]
 };

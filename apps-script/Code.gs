@@ -12,7 +12,7 @@ const SHEET_MASTER = "MASTER_ITEMS";
 // ========================================
 
 function doGet(e) {
-  const action = e.parameter.action || "getOrders";
+  const action = (e && e.parameter) ? e.parameter.action : "getDashboardStats";
   let result;
 
   try {
@@ -32,11 +32,25 @@ function doGet(e) {
       case "filterOrders":
         result = filterOrders(e.parameter);
         break;
-      case "getMasterItems":
-        result = getMasterItems();
-        break;
       case "getDepartments":
         result = getDepartments();
+        break;
+      case "createOrder":
+        var data = JSON.parse(e.parameter.data);
+        result = createOrder(data);
+        break;
+      case "updateOrder":
+        var data = JSON.parse(e.parameter.data);
+        result = updateOrder(data);
+        break;
+      case "updateOrderStatus":
+        result = updateOrderStatus({
+          orderId: e.parameter.orderId,
+          status: e.parameter.status
+        });
+        break;
+      case "deleteOrder":
+        result = deleteOrder(e.parameter.id);
         break;
       default:
         result = { success: false, message: "Unknown action: " + action };

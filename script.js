@@ -23,6 +23,7 @@ document.addEventListener("DOMContentLoaded", () => {
   lucide.createIcons();
   populateDepartments();
   setDefaultDate();
+  addItemRow();
 
   if (CONFIG.API_URL && CONFIG.API_URL !== "YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL") {
     useMockData = false;
@@ -39,8 +40,6 @@ function loadSavedConfig() {
     API.init();
     useMockData = false;
   }
-  const input = document.getElementById("api-url-input");
-  if (input) input.value = saved || "";
 }
 
 function setDefaultDate() {
@@ -89,7 +88,6 @@ function loadMockData() {
   renderDashboardStats(MOCK_DATA.dashboard);
   renderRecentOrders(MOCK_DATA.dashboard.recentOrders);
   renderOrdersTable();
-  renderMasterItems(MOCK_DATA.masterItems);
 }
 
 // ========================================
@@ -103,11 +101,8 @@ function navigateTo(page) {
   document.getElementById("page-" + page).classList.remove("hidden");
   document.getElementById("nav-" + page).classList.add("active");
 
-  const titles = { dashboard: "Overview", orders: "Orders", settings: "Settings" };
+  const titles = { dashboard: "Overview", orders: "Orders" };
   document.getElementById("page-title").textContent = titles[page] || "Overview";
-
-  const newOrderBtn = document.getElementById("btn-new-order");
-  newOrderBtn.style.display = page === "settings" ? "none" : "";
 
   closeSidebar();
 
@@ -117,8 +112,6 @@ function navigateTo(page) {
     loadDashboardData();
   } else if (page === "orders" && !useMockData) {
     loadOrdersData();
-  } else if (page === "settings") {
-    loadMasterItems();
   }
 }
 
@@ -530,20 +523,17 @@ function closeDrawer() {
 // New / Edit Order Modal
 // ========================================
 
-function showNewOrderModal() {
-  document.getElementById("modal-title").textContent = "New Work Order";
-  document.getElementById("btn-submit-order").textContent = "Create Order";
+function resetForm() {
   document.getElementById("form-order-id").value = "";
   document.getElementById("form-requester").value = "";
   document.getElementById("form-purpose").value = "";
   document.getElementById("form-notes").value = "";
+  document.getElementById("btn-submit-order").textContent = "Create Order";
   setDefaultDate();
   populateDepartments();
   document.getElementById("items-container").innerHTML = "";
   document.getElementById("items-error").classList.add("hidden");
   addItemRow();
-
-  document.getElementById("order-modal").classList.remove("hidden");
 }
 
 async function editOrder(orderId) {
@@ -560,8 +550,6 @@ async function editOrder(orderId) {
 
   if (!order) return;
 
-  document.getElementById("modal-title").textContent = "Edit Work Order";
-  document.getElementById("btn-submit-order").textContent = "Update Order";
   document.getElementById("form-order-id").value = order.OrderID;
   document.getElementById("form-date").value = order.Date;
   document.getElementById("form-requester").value = order.RequesterName;
@@ -569,6 +557,7 @@ async function editOrder(orderId) {
   document.getElementById("form-notes").value = order.Notes || "";
   populateDepartments();
   document.getElementById("form-department").value = order.Department;
+  document.getElementById("btn-submit-order").textContent = "Update Order";
 
   const container = document.getElementById("items-container");
   container.innerHTML = "";
@@ -576,11 +565,10 @@ async function editOrder(orderId) {
   if ((order.Items || []).length === 0) addItemRow();
 
   document.getElementById("items-error").classList.add("hidden");
-  document.getElementById("order-modal").classList.remove("hidden");
-}
 
-function closeModal() {
-  document.getElementById("order-modal").classList.add("hidden");
+  // Scroll to form on mobile
+  document.getElementById("form-date").scrollIntoView({ behavior: "smooth", block: "center" });
+  showToast("Editing order " + orderId, "info");
 }
 
 function populateDepartments() {
@@ -597,21 +585,9 @@ function addItemRow(item = null) {
   const row = document.createElement("div");
   row.className = "item-row bg-surface-50 rounded-xl p-3 border border-surface-100";
 
-  const items = useMockData ? MOCK_DATA.masterItems : [];
-  const itemOptions = items.map(i => `<option value="${i.Name}" ${item && item.ItemName === i.Name ? "selected" : ""}>${i.Name}</option>`).join("");
-
   row.innerHTML = `
     <div>
-      ${itemOptions ? `
-        <select onchange="handleItemSelect(this)" class="w-full px-2.5 py-2 text-sm bg-white border border-surface-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500/20 item-name">
-          <option value="">Select item</option>
-          ${itemOptions}
-          <option value="__custom__">Other (type below)</option>
-        </select>
-        <input type="text" class="w-full px-2.5 py-2 text-sm bg-white border border-surface-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500/20 mt-1.5 item-custom-name hidden" placeholder="Item name">
-      ` : `
-        <input type="text" value="${item ? item.ItemName : ""}" class="w-full px-2.5 py-2 text-sm bg-white border border-surface-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500/20 item-name" placeholder="Item name">
-      `}
+      <input type="text" value="${item ? item.ItemName : ""}" class="w-full px-2.5 py-2 text-sm bg-white border border-surface-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500/20 item-name" placeholder="Item name">
     </div>
     <input type="number" value="${item ? item.Quantity : ""}" min="1" class="w-full px-2.5 py-2 text-sm bg-white border border-surface-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500/20 item-qty" placeholder="Qty">
     <select class="w-full px-2.5 py-2 text-sm bg-white border border-surface-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500/20 item-unit">
@@ -625,18 +601,6 @@ function addItemRow(item = null) {
 
   container.appendChild(row);
   lucide.createIcons();
-}
-
-function handleItemSelect(select) {
-  const row = select.closest(".item-row");
-  const customInput = row.querySelector(".item-custom-name");
-  if (select.value === "__custom__") {
-    customInput.classList.remove("hidden");
-    customInput.focus();
-  } else {
-    customInput.classList.add("hidden");
-    customInput.value = "";
-  }
 }
 
 function removeItemRow(btn) {
@@ -726,7 +690,7 @@ async function submitOrder() {
       renderOrdersTable();
       showToast("Order created: " + newId, "success");
     }
-    closeModal();
+    resetForm();
     return;
   }
 
@@ -739,7 +703,7 @@ async function submitOrder() {
 
   if (res.success) {
     showToast(orderId ? "Order updated successfully" : "Order created: " + res.data.orderId, "success");
-    closeModal();
+    resetForm();
     loadData();
   } else {
     showToast(res.message || "Failed to save order", "error");
@@ -844,92 +808,6 @@ async function deleteOrder(orderId) {
       }
     }
   );
-}
-
-// ========================================
-// Master Items (Settings)
-// ========================================
-
-async function loadMasterItems() {
-  if (useMockData) {
-    renderMasterItems(MOCK_DATA.masterItems);
-    return;
-  }
-  const res = await API.getMasterItems();
-  if (res.success) renderMasterItems(res.data);
-}
-
-function renderMasterItems(items) {
-  const container = document.getElementById("master-items-list");
-  if (!items || items.length === 0) {
-    container.innerHTML = `<p class="px-5 py-6 text-center text-sm text-surface-400">No items configured</p>`;
-    return;
-  }
-
-  container.innerHTML = items.map(item => `
-    <div class="flex items-center justify-between px-4 py-3 hover:bg-surface-50 transition-colors">
-      <div class="flex items-center gap-3 min-w-0">
-        <div class="w-8 h-8 bg-surface-100 rounded-lg flex items-center justify-center flex-shrink-0">
-          <i data-lucide="package" class="w-4 h-4 text-surface-500"></i>
-        </div>
-        <div class="min-w-0">
-          <p class="text-sm font-medium text-surface-700 truncate">${item.Name}</p>
-          <p class="text-xs text-surface-400">${item.Unit} - ${item.Category}</p>
-        </div>
-      </div>
-      <button onclick="deleteMasterItem('${item.ID}')" class="p-1.5 rounded-lg hover:bg-red-50 text-surface-400 hover:text-red-500 transition-colors flex-shrink-0">
-        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-      </button>
-    </div>
-  `).join("");
-  lucide.createIcons();
-}
-
-async function addMasterItem() {
-  const name = document.getElementById("new-item-name").value.trim();
-  const unit = document.getElementById("new-item-unit").value;
-  const category = document.getElementById("new-item-category").value.trim() || "General";
-
-  if (!name) {
-    showToast("Please enter an item name", "error");
-    return;
-  }
-
-  if (useMockData) {
-    const newId = "MI-" + String(MOCK_DATA.masterItems.length + 1).padStart(3, "0");
-    MOCK_DATA.masterItems.push({ ID: newId, Name: name, Unit: unit, Category: category });
-    renderMasterItems(MOCK_DATA.masterItems);
-    document.getElementById("new-item-name").value = "";
-    document.getElementById("new-item-category").value = "";
-    showToast("Item added successfully", "success");
-    return;
-  }
-
-  const res = await API.addMasterItem({ name, unit, category });
-  if (res.success) {
-    showToast("Item added successfully", "success");
-    document.getElementById("new-item-name").value = "";
-    document.getElementById("new-item-category").value = "";
-    loadMasterItems();
-  } else {
-    showToast(res.message || "Failed to add item", "error");
-  }
-}
-
-async function deleteMasterItem(id) {
-  showConfirm("Delete Item", "Remove this item from the master list?", async () => {
-    if (useMockData) {
-      MOCK_DATA.masterItems = MOCK_DATA.masterItems.filter(i => i.ID !== id);
-      renderMasterItems(MOCK_DATA.masterItems);
-      showToast("Item deleted", "info");
-      return;
-    }
-    const res = await API.deleteMasterItem(id);
-    if (res.success) {
-      showToast("Item deleted", "info");
-      loadMasterItems();
-    }
-  });
 }
 
 // ========================================
@@ -1363,39 +1241,6 @@ function exportWorkOrder(orderId) {
   printWindow.focus();
   setTimeout(() => printWindow.print(), 600);
   showToast("Work order export ready", "success");
-}
-
-// ========================================
-// API Settings
-// ========================================
-
-function saveApiUrl() {
-  const url = document.getElementById("api-url-input").value.trim();
-  if (!url) {
-    showToast("Please enter a URL", "error");
-    return;
-  }
-  localStorage.setItem("wo_api_url", url);
-  CONFIG.API_URL = url;
-  API.init();
-  useMockData = false;
-  showToast("API URL saved. Reloading data...", "success");
-  loadData();
-}
-
-async function testApiConnection() {
-  const statusEl = document.getElementById("api-status");
-  statusEl.textContent = "Testing connection...";
-  statusEl.className = "text-xs mt-2 text-surface-500";
-
-  const res = await API.getDashboardStats();
-  if (res.success) {
-    statusEl.textContent = "Connection successful!";
-    statusEl.className = "text-xs mt-2 text-emerald-600 font-medium";
-  } else {
-    statusEl.textContent = "Connection failed: " + res.message;
-    statusEl.className = "text-xs mt-2 text-red-500 font-medium";
-  }
 }
 
 // ========================================

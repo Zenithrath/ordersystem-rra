@@ -150,15 +150,6 @@
   text-align: center;
 }
 
-/* Modal form transition */
-#order-modal > div:last-child {
-  animation: modalIn 0.25s ease;
-}
-@keyframes modalIn {
-  from { transform: scale(0.95); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
-}
-
 /* Drawer */
 #detail-drawer.open #drawer-panel {
   transform: translateX(0);

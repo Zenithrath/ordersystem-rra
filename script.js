@@ -392,16 +392,7 @@ async function openOrderDetail(orderId) {
   const drawer = document.getElementById("detail-drawer");
   const panel = document.getElementById("drawer-panel");
 
-  if (useMockData) {
-    currentDetailOrder = allOrders.find(o => o.OrderID === orderId);
-  } else {
-    const res = await API.getOrderDetail(orderId);
-    if (!res.success) {
-      showToast("Failed to load order details", "error");
-      return;
-    }
-    currentDetailOrder = res.data;
-  }
+  currentDetailOrder = allOrders.find(o => o.OrderID === orderId);
 
   if (!currentDetailOrder) {
     showToast("Order not found", "error");
@@ -539,14 +530,7 @@ function resetForm() {
 async function editOrder(orderId) {
   closeDrawer();
 
-  let order;
-  if (useMockData) {
-    order = allOrders.find(o => o.OrderID === orderId);
-  } else {
-    const res = await API.getOrderDetail(orderId);
-    if (!res.success) { showToast("Failed to load order", "error"); return; }
-    order = res.data;
-  }
+  const order = allOrders.find(o => o.OrderID === orderId);
 
   if (!order) return;
 
@@ -697,14 +681,39 @@ async function submitOrder() {
   let res;
   if (orderId) {
     res = await API.updateOrder({ orderId, ...orderData });
+    if (res.success) {
+      const idx = allOrders.findIndex(o => o.OrderID === orderId);
+      if (idx !== -1) {
+        allOrders[idx] = { ...allOrders[idx], ...orderData, Items: items, ItemCount: items.length };
+      }
+    }
   } else {
     res = await API.createOrder(orderData);
+    if (res.success) {
+      const newOrder = {
+        OrderID: res.data.orderId,
+        ...orderData,
+        Status: "Pending",
+        CreatedAt: new Date().toISOString(),
+        CompletedAt: "",
+        ItemCount: items.length,
+        Items: items
+      };
+      allOrders.unshift(newOrder);
+    }
   }
 
   if (res.success) {
-    showToast(orderId ? "Order updated successfully" : "Order created: " + res.data.orderId, "success");
+    filteredOrders = [...allOrders];
+    renderOrdersTable();
+    renderDashboardStats({
+      totalOrders: allOrders.length,
+      pendingOrders: allOrders.filter(o => o.Status === "Pending").length,
+      completedOrders: allOrders.filter(o => o.Status === "Completed").length,
+      ordersThisMonth: allOrders.filter(o => { const d = new Date(o.Date); const n = new Date(); return d.getMonth() === n.getMonth() && d.getFullYear() === n.getFullYear(); }).length
+    });
+    showToast(orderId ? "Order updated" : "Order created: " + res.data.orderId, "success");
     resetForm();
-    loadData();
   } else {
     showToast(res.message || "Failed to save order", "error");
   }
@@ -728,25 +737,18 @@ async function markCompleted(orderId) {
     "Mark as Completed",
     "This order will be marked as completed. Continue?",
     async () => {
-      if (useMockData) {
+      const res = await API.updateOrderStatus(orderId, "Completed");
+      if (res.success) {
         const order = allOrders.find(o => o.OrderID === orderId);
         if (order) {
           order.Status = "Completed";
           order.CompletedAt = new Date().toISOString();
-          filteredOrders = [...allOrders];
-          renderOrdersTable();
-          currentDetailOrder = order;
-          renderDrawerContent();
-          showToast("Order marked as completed", "success");
         }
-        return;
-      }
-
-      const res = await API.updateOrderStatus(orderId, "Completed");
-      if (res.success) {
-        showToast("Order marked as completed", "success");
-        closeDrawer();
-        loadData();
+        filteredOrders = [...allOrders];
+        renderOrdersTable();
+        currentDetailOrder = order;
+        renderDrawerContent();
+        showToast("Order completed", "success");
       } else {
         showToast(res.message || "Failed to update status", "error");
       }
@@ -757,26 +759,19 @@ async function markCompleted(orderId) {
 async function cancelOrder(orderId) {
   showConfirm(
     "Cancel Order",
-    "This order will be cancelled. This action cannot be undone.",
+    "This order will be cancelled. Continue?",
     async () => {
-      if (useMockData) {
+      const res = await API.updateOrderStatus(orderId, "Cancelled");
+      if (res.success) {
         const order = allOrders.find(o => o.OrderID === orderId);
         if (order) {
           order.Status = "Cancelled";
-          filteredOrders = [...allOrders];
-          renderOrdersTable();
-          currentDetailOrder = order;
-          renderDrawerContent();
-          showToast("Order cancelled", "info");
         }
-        return;
-      }
-
-      const res = await API.updateOrderStatus(orderId, "Cancelled");
-      if (res.success) {
+        filteredOrders = [...allOrders];
+        renderOrdersTable();
+        currentDetailOrder = order;
+        renderDrawerContent();
         showToast("Order cancelled", "info");
-        closeDrawer();
-        loadData();
       } else {
         showToast(res.message || "Failed to cancel order", "error");
       }
@@ -787,22 +782,15 @@ async function cancelOrder(orderId) {
 async function deleteOrder(orderId) {
   showConfirm(
     "Delete Order",
-    "This order will be permanently deleted. This action cannot be undone.",
+    "This order will be permanently deleted. Continue?",
     async () => {
-      if (useMockData) {
+      const res = await API.deleteOrder(orderId);
+      if (res.success) {
         allOrders = allOrders.filter(o => o.OrderID !== orderId);
         filteredOrders = [...allOrders];
         renderOrdersTable();
         closeDrawer();
         showToast("Order deleted", "info");
-        return;
-      }
-
-      const res = await API.deleteOrder(orderId);
-      if (res.success) {
-        showToast("Order deleted", "info");
-        closeDrawer();
-        loadData();
       } else {
         showToast(res.message || "Failed to delete order", "error");
       }

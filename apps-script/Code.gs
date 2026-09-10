@@ -127,9 +127,25 @@ function readOrders() {
 
 function migrateData() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const ordersSheet = ss.getSheetByName(SHEET_ORDERS);
+  let ordersSheet = ss.getSheetByName(SHEET_ORDERS);
   const itemsSheet = ss.getSheetByName(SHEET_ITEMS);
-  if (!ordersSheet) return { success: false, message: "Sheet ORDERS tidak ditemukan" };
+
+  // If no ORDERS sheet, create fresh with correct headers
+  if (!ordersSheet) {
+    ordersSheet = ss.insertSheet(SHEET_ORDERS);
+    ordersSheet.appendRow(["OrderID", "Date", "RequesterName", "Department", "Purpose", "Notes", "Status", "ItemName", "Quantity", "Unit", "ItemNotes"]);
+    if (itemsSheet) { try { ss.deleteSheet(itemsSheet); } catch(e) {} }
+    return { success: true, message: "Sheet ORDERS baru dibuat dengan 11 kolom" };
+  }
+
+  const lastRow = ordersSheet.getLastRow();
+  if (lastRow < 2) {
+    // Empty sheet, just set headers
+    ordersSheet.clearContents();
+    ordersSheet.appendRow(["OrderID", "Date", "RequesterName", "Department", "Purpose", "Notes", "Status", "ItemName", "Quantity", "Unit", "ItemNotes"]);
+    if (itemsSheet) { try { ss.deleteSheet(itemsSheet); } catch(e) {} }
+    return { success: true, message: "Sheet ORDERS kosong, header sudah di-set" };
+  }
 
   const numCols = ordersSheet.getLastColumn();
   const headers = ordersSheet.getRange(1, 1, 1, numCols).getValues()[0];
